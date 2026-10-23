@@ -130,7 +130,7 @@ function scheduleAi(room) {
     cpuDeclareSweep(room);
     broadcastGame(room);
     scheduleAi(room);
-  }, 850 + Math.random() * 550);
+  }, 1600 + Math.random() * 700);
 }
 
 function settle(room) {
