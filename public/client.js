@@ -30,6 +30,39 @@ function emit(event, data) {
   return new Promise((resolve) => socket.emit(event, data || {}, resolve));
 }
 
+// ------------------------------------------------------------- room reclaim
+
+// The server gives each room member a private token. Keeping it (with
+// the room code) in localStorage lets a dropped connection reclaim its
+// seat after Socket.IO reconnects with a fresh socket id.
+const ROOM_STORE_KEY = 'bj-room';
+let myRoom = null; // { code, name, token }
+let reclaimInFlight = false;
+
+function loadStoredRoom() {
+  try {
+    const raw = localStorage.getItem(ROOM_STORE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && parsed.code && parsed.token) return parsed;
+  } catch {}
+  return null;
+}
+
+function storeRoom(details) {
+  myRoom = details;
+  try {
+    if (details) localStorage.setItem(ROOM_STORE_KEY, JSON.stringify(details));
+    else localStorage.removeItem(ROOM_STORE_KEY);
+  } catch {}
+}
+
+function sameRoom(a, b) {
+  return !!a && !!b && a.code === b.code && a.token === b.token;
+}
+
+myRoom = loadStoredRoom();
+
 // ------------------------------------------------------------- card utils
 
 function rankValue(r) {
@@ -156,6 +189,7 @@ function renderHome() {
     localStorage.setItem('bj-name', name);
     const res = await emit('createRoom', { name });
     if (!res || !res.ok) toast((res && res.error) || 'Could not create a room.');
+    else storeRoom({ code: res.code, name, token: res.token });
   };
   document.getElementById('join').onclick = async () => {
     const name = document.getElementById('name').value.trim();
@@ -164,6 +198,7 @@ function renderHome() {
     if (!code) return toast('Enter the room code.');
     const res = await emit('joinRoom', { code, name });
     if (!res || !res.ok) toast((res && res.error) || 'Could not join that room.');
+    else storeRoom({ code: res.code, name, token: res.token });
   };
 }
 
@@ -173,7 +208,7 @@ function renderLobby() {
   const members = state.members
     .map(
       (m) =>
-        `<div class="member"><span>${escapeHtml(m.name)}${m.isYou ? ' (you)' : ''}</span>${
+        `<div class="member"><span>${escapeHtml(m.name)}${m.isYou ? ' (you)' : ''}${m.away ? ' (away)' : ''}</span>${
           m.isHost ? '<span class="tag-host">HOST</span>' : ''
         }</div>`
     )
@@ -420,6 +455,7 @@ function renderSuitPicker() {
 }
 
 function leaveRoom() {
+  storeRoom(null); // explicit leave: no reclaim afterwards
   socket.emit('leaveRoom', {});
   state = null;
   selected = [];
@@ -496,7 +532,31 @@ socket.on('state', (s) => {
   render();
 });
 
-socket.on('connect', () => {
+socket.on('connect', async () => {
+  // Every (re)connect gets a fresh socket id, which the server does not
+  // recognise — reclaim the room from the stored details so a dropped
+  // connection (app switch, signal loss) lands back in its lobby/seat.
+  const saved = myRoom || loadStoredRoom();
+  if (saved && !reclaimInFlight) {
+    reclaimInFlight = true;
+    const res = await emit('reclaim', { code: saved.code, token: saved.token });
+    reclaimInFlight = false;
+    if (res && res.ok) {
+      // The server re-sends the lobby/game state, which re-renders.
+      if (sameRoom(loadStoredRoom(), saved)) myRoom = saved;
+      return;
+    }
+    // Failed — unless the player has since created/joined a different
+    // room (stored details changed), that room is gone for good.
+    if (sameRoom(loadStoredRoom(), saved)) {
+      storeRoom(null);
+      state = null;
+      selected = [];
+      render();
+      toast('That room has ended — create a new one or rejoin with a fresh code.');
+    }
+    return;
+  }
   if (!state) render();
 });
 
