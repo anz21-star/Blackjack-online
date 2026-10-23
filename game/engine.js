@@ -25,10 +25,10 @@
 //    run rules (same suit and consecutive, wrapping K-A-2); a mid-run
 //    Ace's power is ignored. A suit is declared only when an Ace is the
 //    only card played or the final card of a run.
-//  - "Last cards" can be called at any time before your next turn once
-//    your hand could be shed in one internally legal play — eligibility
-//    is judged on the hand alone, since the pile may change before your
-//    turn comes round. A call covers only that one
+//  - "Last cards" can be called at any time before your next turn —
+//    and never during your own turn — once your hand could be shed in
+//    one internally legal play. Eligibility is judged on the hand
+//    alone, since the pile may change before your turn comes round. A call covers only that one
 //    next turn: if the turn ends without you going out (you played but
 //    didn't finish, picked up voluntarily, or were made to pick up),
 //    the call resets and may be made again later in the game. Going out
@@ -270,11 +270,21 @@ function canDeclare(state, idx) {
   const p = state.players[idx];
   if (!p || p.out || p.declared) return false;
   if (state.phase !== 'playing') return false;
+  // Anisah's ruling (23 Oct 2026): "Last cards must be called before
+  // your next turn" — calling during your own turn is not legal, even
+  // moments before playing the hand. (She caught the game letting her
+  // declare on her final turn and finish on that same turn.) The
+  // server's CPU declare sweep goes through this function too, so a
+  // CPU likewise never declares on its own turn.
+  if (state.current === idx) return false;
   if (p.hand.length === 1) return true;
   return canShedAll(state, idx);
 }
 
 function applyDeclare(state, idx) {
+  if (state.phase === 'playing' && state.current === idx) {
+    return { ok: false, error: "Last cards must be called before your turn — you can't call it during your own turn." };
+  }
   if (!canDeclare(state, idx)) {
     return { ok: false, error: 'You can only call last cards when you could finish on your next turn.' };
   }
@@ -353,28 +363,31 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
 
   // ---- going out?
   // An illegal finish (final card not a legal finish card) is not
-  // rejected: the played cards stay on the pile, any pick up chain the
-  // player was answering is cleared, and the player picks up 1 and
-  // stays in — for declared and undeclared players alike. The same
-  // penalty covers a finish on a legal card made without an active
-  // "last cards" call.
-  if (p.hand.length === 0) {
-    if (!isLegalFinishCard(final) || !p.declared) {
-      const reason = !isLegalFinishCard(final)
-        ? `can't finish on ${cardStr(final)} — a red Jack is the only power card you can finish on`
-        : 'forgot to call last cards';
-      if (wasChain) {
-        state.chain = false;
-        state.pending = 0;
-      }
-      state.requiredSuit = null;
-      state.suitDeclarer = null;
-      p.declared = false; // their turn has ended; any call is spent
-      recordPickup(state, idx, drawCards(state, idx, 1));
-      pushLog(state, `${p.name} ${reason} — picks up 1 and stays in.`);
-      advance(state, 1);
-      return { ok: true };
-    }
+  // rejected: the played cards stay on the pile and the player picks
+  // up 1 and stays in — for declared and undeclared players alike. The
+  // same penalty covers a finish on a legal card made without an
+  // active "last cards" call.
+  if (p.hand.length === 0 && (!isLegalFinishCard(final) || !p.declared)) {
+    const reason = !isLegalFinishCard(final)
+      ? `can't finish on ${cardStr(final)} — a red Jack is the only power card you can finish on`
+      : 'forgot to call last cards';
+    p.declared = false; // their turn has ended; any call is spent
+    recordPickup(state, idx, drawCards(state, idx, 1));
+    pushLog(state, `${p.name} ${reason} — picks up 1 and stays in.`);
+    // Anisah's ruling (23 Oct 2026): "the power of the card played
+    // should still stand". An illegal finish does NOT swallow the
+    // final card's power, and a chain the player was answering is
+    // consumed exactly as normal — so there is deliberately no return
+    // here: play falls through to the ordinary end-of-turn effects
+    // below, which pass a black Jack's +5 / a 2's +2 on to the next
+    // player, apply an 8's skip or a King's reversal, and let an
+    // Ace's named suit stand. (Before this ruling the +5 was dropped:
+    // she finished Q♠ → J♣, drew her penalty card, and the next player
+    // wrongly picked up only 1.) An uncovered Queen ending has no
+    // power to pass on — validatePlay rejects those plays anyway.
+    // A clean finish (legal final card + active call) is the only
+    // way out, and it is handled just below.
+  } else if (p.hand.length === 0) {
     // A clean finish.
     p.out = true;
     p.place = state.placements.length + 1;
