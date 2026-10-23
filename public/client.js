@@ -8,31 +8,11 @@
 const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'];
 const SYM = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
 
-/* One shared set of suit shapes for every icon in the UI (card faces,
-   the Ace suit picker, the named-suit seat bubble), drawn as inline SVG
-   so the shapes are identical everywhere instead of depending on the
-   platform's font glyphs. Classic playing-card silhouettes on a
-   100×100 grid; the fill is currentColor, so each context colours the
-   icon through its normal text colour. SYM above stays for text (the
-   "Playing: …" line and other strings). */
-const SUIT_SHAPES = {
-  spades:
-    '<path d="M50 6 C40 22 10 38 10 60 C10 71 18 79 27 79 C35 79 41 75 45 69 C44 79 40 88 33 94 L67 94 C60 88 56 79 55 69 C59 75 65 79 73 79 C82 79 90 71 90 60 C90 38 60 22 50 6 Z"/>',
-  hearts:
-    '<path d="M50 90 C28 70 10 54 10 34 C10 20 20 10 32 10 C41 10 47 15 50 23 C53 15 59 10 68 10 C80 10 90 20 90 34 C90 54 72 70 50 90 Z"/>',
-  diamonds: '<path d="M50 5 L87 50 L50 95 L13 50 Z"/>',
-  clubs:
-    '<circle cx="50" cy="31" r="19.5"/><circle cx="30" cy="57" r="18.5"/><circle cx="70" cy="57" r="18.5"/>' +
-    '<path d="M46 48 C46 66 42 82 34 94 L66 94 C58 82 54 66 54 48 Z"/>',
-};
-function suitIcon(suit) {
-  return `<svg class="suit-icon" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false">${SUIT_SHAPES[suit]}</svg>`;
-}
-
 const socket = io();
 let state = null; // latest server state (lobby or game)
 let selected = []; // card ids, in tap order
 let renderedSeq = 0; // lastPlay seq already animated
+let renderedPickupSeq = 0; // lastPickup seq already animated
 let displayedTop = []; // discard fan contents (lags during play animation)
 let fanTimer = null;
 let suitPickFor = null; // cardIds awaiting a declared suit
@@ -284,7 +264,7 @@ function cardEl(card, extra) {
   const colour = isRed(card) ? 'red' : 'black';
   const tag = powerTag(card);
   return `<div class="card ${colour} ${extra || ''}">
-    <span class="rank">${card.rank}</span><span class="suit">${suitIcon(card.suit)}</span>
+    <span class="rank">${card.rank}</span><span class="suit">${SYM[card.suit]}</span>
     ${tag ? `<span class="ptag">${tag}</span>` : ''}
   </div>`;
 }
@@ -316,7 +296,7 @@ function seatEl(view, p) {
   // named-suit bubble stack in the same container when both apply.
   const suitBubble =
     view.requiredSuit && view.suitDeclarerIdx === p.idx
-      ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${suitIcon(view.requiredSuit)}</span></div>`
+      ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${SYM[view.requiredSuit]}</span></div>`
       : '';
   const bubbles =
     p.declared || suitBubble
@@ -389,8 +369,8 @@ function renderGame() {
         selected.length === 0 && ctx !== 'none' ? (playable ? 'legal' : 'unplayable') : ''
       }" data-card="${c.id}">
         ${selIdx >= 0 ? `<span class="order-badge">${selIdx + 1}</span>` : ''}
-        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${suitIcon(c.suit)}</span></span>
-        <span class="rank">${c.rank}</span><span class="suit">${suitIcon(c.suit)}</span>
+        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${SYM[c.suit]}</span></span>
+        <span class="rank">${c.rank}</span><span class="suit">${SYM[c.suit]}</span>
         ${powerTag(c) ? `<span class="ptag">${powerTag(c)}</span>` : ''}
       </div>`;
     })
@@ -656,7 +636,7 @@ function renderSuitPicker() {
   modal.innerHTML = `<div class="modal"><div class="box">
     <div>Your Ace names the suit to follow:</div>
     <div class="suits">${SUITS.map(
-      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#ff6a52' : '#2f353c'}">${suitIcon(s)}</button>`
+      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#ff6a52' : '#2f353c'}">${SYM[s]}</button>`
     ).join('')}</div>
   </div></div>`;
   modal.querySelectorAll('button').forEach((b) => {
@@ -676,6 +656,7 @@ function leaveRoom() {
   state = null;
   selected = [];
   renderedSeq = 0;
+  renderedPickupSeq = 0;
   displayedTop = [];
   render();
 }
@@ -717,6 +698,45 @@ function animatePlay(lp) {
   });
 }
 
+/* The reverse flight for pick ups: card-backs fly from the draw pile
+   to the seat of the player who picked up — or, for the local player,
+   down toward their hand. Capped at 5 backs however many were drawn;
+   same WAAPI style as animatePlay, a slightly quicker stagger. */
+function animatePickup(pu) {
+  const table = document.getElementById('table');
+  if (!table || !pu) return;
+  const drawEl = table.querySelector('.draw-back');
+  if (!drawEl) return;
+  let targetEl = null;
+  if (state && pu.playerIdx === state.yourIdx) {
+    targetEl = document.getElementById('hand') || table;
+  } else {
+    targetEl = table.querySelector(`[data-seat="${pu.playerIdx}"]`) || table;
+  }
+  const from = drawEl.getBoundingClientRect();
+  const to = targetEl.getBoundingClientRect();
+  const dx = to.left + to.width / 2 - (from.left + from.width / 2);
+  const dy = to.top + to.height / 2 - (from.top + from.height / 2);
+  const n = Math.max(0, Math.min(pu.count || 0, 5));
+  for (let i = 0; i < n; i++) {
+    const el = document.createElement('div');
+    el.className = 'draw-back fly-card';
+    el.style.left = `${from.left}px`;
+    el.style.top = `${from.top}px`;
+    el.style.margin = '0';
+    document.body.appendChild(el);
+    el.animate(
+      [
+        { transform: 'translate(0,0)', opacity: 1 },
+        { transform: `translate(${dx * 0.55}px, ${dy * 0.55 - 24}px)`, opacity: 1, offset: 0.55 },
+        { transform: `translate(${dx}px, ${dy}px)`, opacity: 1 },
+      ],
+      { duration: 480, delay: i * 140, easing: 'cubic-bezier(.22,.9,.28,1)', fill: 'forwards' }
+    );
+    setTimeout(() => el.remove(), i * 140 + 540);
+  }
+}
+
 // ------------------------------------------------------------- main render
 
 function render() {
@@ -741,11 +761,26 @@ socket.on('state', (s) => {
       selected = selected.filter((id) => handIds.has(id));
       if (myTurnContext() === 'none') selected = [];
     }
-    if (s.lastPlay && s.lastPlay.seq > renderedSeq) {
-      const lp = s.lastPlay;
-      renderedSeq = lp.seq;
+    if (prevScreen !== 'game') {
+      // Arriving on the game screen (start, join, reclaim): sync the
+      // animation seqs to whatever already happened — never replay
+      // stale play/pickup flights.
+      displayedTop = s.topCards;
+      renderedSeq = s.lastPlay ? s.lastPlay.seq : 0;
+      renderedPickupSeq = s.lastPickup ? s.lastPickup.seq : 0;
+      render();
+      return;
+    }
+    const lp = s.lastPlay && s.lastPlay.seq > renderedSeq ? s.lastPlay : null;
+    const pu = s.lastPickup && s.lastPickup.seq > renderedPickupSeq ? s.lastPickup : null;
+    if (lp) renderedSeq = lp.seq;
+    if (pu) renderedPickupSeq = pu.seq;
+    if (lp) {
       render(); // render everything (hand, counts, log) first…
       animatePlay(lp); // …cards fly from the seat…
+      // A penalty pick up can ride along with the same action (illegal
+      // finish / no-call finish): fly those backs too.
+      if (pu) animatePickup(pu);
       const total = (lp.cards.length - 1) * 320 + 540; // last card lands at (n-1)*320 + 500
       if (fanTimer) clearTimeout(fanTimer);
       fanTimer = setTimeout(() => {
@@ -756,7 +791,9 @@ socket.on('state', (s) => {
       return;
     }
     displayedTop = s.topCards;
-    if (prevScreen !== 'game') renderedSeq = s.lastPlay ? s.lastPlay.seq : 0;
+    render();
+    if (pu) animatePickup(pu);
+    return;
   }
   render();
 });
