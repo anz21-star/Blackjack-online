@@ -26,7 +26,9 @@
 //    Ace's power is ignored. A suit is declared only when an Ace is the
 //    only card played or the final card of a run.
 //  - "Last cards" can be called at any time before your next turn once
-//    you could finish on that next turn. A call covers only that one
+//    your hand could be shed in one internally legal play — eligibility
+//    is judged on the hand alone, since the pile may change before your
+//    turn comes round. A call covers only that one
 //    next turn: if the turn ends without you going out (you played but
 //    didn't finish, picked up voluntarily, or were made to pick up),
 //    the call resets and may be made again later in the game. Going out
@@ -221,10 +223,18 @@ function ordinal(n) {
 
 // ------------------------------------------------------- last cards call
 
-// Could this player shed their whole hand in one legal play right now?
+// Could this player shed their whole hand in one internally legal play?
+// Declare eligibility (Anisah's ruling): the hand ALONE is judged —
+// some ordering of it where consecutive cards link by the run rules,
+// every Queen is covered within the play, and the final card is a legal
+// finish card. The current top card, any named/required suit and any
+// pending pick up chain are deliberately ignored: other players may
+// discard something that makes the run playable before the caller's
+// next turn. This is NOT a play-legality check — validatePlay still
+// requires a legal first card on the then-current top card, and
+// nothing in play execution or the AI's play choice consults this.
 // (DFS over play sequences; bounded to hands of 8 or fewer.)
 function canShedAll(state, idx) {
-  if (state.chain) return false;
   const hand = state.players[idx].hand;
   if (hand.length < 2 || hand.length > 8) return false;
   const used = new Array(hand.length).fill(false);
@@ -233,12 +243,8 @@ function canShedAll(state, idx) {
     for (let i = 0; i < hand.length; i++) {
       if (used[i]) continue;
       const c = hand[i];
-      if (count === 0) {
-        if (!firstCardLegal(state, c)) continue;
-      } else if (!linksTo(lastCard, c)) {
-        continue;
-      }
-      if (c.rank === 'Q' && count === hand.length - 1) continue; // can't end on a Queen
+      if (count > 0 && !linksTo(lastCard, c)) continue;
+      if (c.rank === 'Q' && count === hand.length - 1) continue; // a Queen must be covered within the play
       used[i] = true;
       if (dfs(c, count + 1)) return true;
       used[i] = false;
@@ -309,14 +315,10 @@ function validatePlay(state, idx, cardIds, declaredSuit) {
     }
   }
   if (final.rank === 'Q') return 'A Queen must be covered — a play can never end on a Queen.';
-  // A play that empties the hand is a finish, and a finished play must
-  // be fully legal: it may not end on a power card (only a red Jack may
-  // finish among power cards). Without this check the play was accepted
-  // onto the pile and merely penalised afterwards, so a whole hand
-  // could be dumped in one go on an illegal finish card.
-  if (cards.length === state.players[idx].hand.length && !isLegalFinishCard(final)) {
-    return `That would finish you on ${cardStr(final)} — a finished play must end on an ordinary card or a red Jack.`;
-  }
+  // Note: a play that empties the hand on an illegal finish card (Ace,
+  // 2, black Jack, 8, King) is NOT rejected here. Per Anisah's ruling
+  // it lands, and applyPlay's going-out path deals the penalty: the
+  // cards stay on the pile and the player picks up 1 and stays in.
   if (final.rank === 'A' && !SUITS.includes(declaredSuit)) return 'Choose a suit for the Ace to declare.';
   if (final.rank !== 'A' && declaredSuit) return null; // ignored harmlessly
   return null;
@@ -338,10 +340,12 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
   const wasChain = state.chain;
 
   // ---- going out?
-  // (Non-chain plays that would finish on an illegal card are rejected
-  // by validatePlay before they get here; this penalty path still
-  // covers chain answers that empty the hand, and any finish made
-  // without an active "last cards" call.)
+  // An illegal finish (final card not a legal finish card) is not
+  // rejected: the played cards stay on the pile, any pick up chain the
+  // player was answering is cleared, and the player picks up 1 and
+  // stays in — for declared and undeclared players alike. The same
+  // penalty covers a finish on a legal card made without an active
+  // "last cards" call.
   if (p.hand.length === 0) {
     if (!isLegalFinishCard(final) || !p.declared) {
       const reason = !isLegalFinishCard(final)
