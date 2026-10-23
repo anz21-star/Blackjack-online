@@ -10,7 +10,7 @@ const SYM = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
 
 const socket = io();
 let state = null; // latest server state (lobby or game)
-let selected = []; // card ids, in tap order
+let selected = []; // card ids, in selected-row order (left to right = play order)
 let renderedSeq = 0; // lastPlay seq already animated
 let renderedPickupSeq = 0; // lastPickup seq already animated
 let displayedTop = []; // discard fan contents (lags during play animation)
@@ -22,6 +22,7 @@ let suitPickFor = null; // cardIds awaiting a declared suit
    order, and the server never sees this order. */
 let handOrder = [];
 let drag = null; // in-progress hand-card pointer drag, or null
+let selDrag = null; // in-progress selected-row pointer drag, or null
 let renderQueued = false; // a render() arrived mid-drag and is deferred
 const DRAG_THRESHOLD = 8; // px of pointer movement that turns a tap into a drag
 
@@ -291,16 +292,20 @@ function seatEl(view, p) {
   const cls = seatClass(view, p.idx);
   const vertical = cls === 'seat-left' || cls === 'seat-right';
   // Speech bubbles hang on the side of the seat facing into the table:
-  // above the seat normally, below it for the top seat (whose "above"
-  // would be clipped by the table's edge). "Last Cards!" and the
-  // named-suit bubble stack in the same container when both apply.
+  // above the seat normally, but BELOW it for every seat along the
+  // table's top edge (centre-top and the two top corners) — for those
+  // seats "above" sits outside the table and is clipped away by the
+  // table's overflow, which is exactly what used to swallow the
+  // opposite player's bubbles. "Last Cards!" and the named-suit
+  // bubble stack in the same container when both apply.
+  const below = cls === 'seat-top' || cls === 'seat-topleft' || cls === 'seat-topright';
   const suitBubble =
     view.requiredSuit && view.suitDeclarerIdx === p.idx
       ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${SYM[view.requiredSuit]}</span></div>`
       : '';
   const bubbles =
     p.declared || suitBubble
-      ? `<div class="bubbles${cls === 'seat-top' ? ' below' : ''}">${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}${suitBubble}</div>`
+      ? `<div class="bubbles${below ? ' below' : ''}">${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}${suitBubble}</div>`
       : '';
   return `<div class="seat ${cls} ${isActor ? 'active-turn' : ''} ${p.out ? 'out' : ''}" data-seat="${p.idx}">
     ${bubbles}
@@ -361,19 +366,30 @@ function renderGame() {
   syncHandOrder(view.yourHand);
   const byId = new Map(view.yourHand.map((c) => [c.id, c]));
   const orderedHand = handOrder.map((id) => byId.get(id)).filter(Boolean);
+  // The fan holds only the cards that are NOT selected; selected cards
+  // live in the row beneath it, in play order.
   const handHtml = orderedHand
+    .filter((c) => !selected.includes(c.id))
     .map((c) => {
-      const selIdx = selected.indexOf(c.id);
       const playable = selected.length === 0 ? isCardPlayableFirst(c) : false;
-      return `<div class="card ${isRed(c) ? 'red' : 'black'} ${selIdx >= 0 ? 'selected' : ''} ${
+      return `<div class="card ${isRed(c) ? 'red' : 'black'} ${
         selected.length === 0 && ctx !== 'none' ? (playable ? 'legal' : 'unplayable') : ''
       }" data-card="${c.id}">
-        ${selIdx >= 0 ? `<span class="order-badge">${selIdx + 1}</span>` : ''}
         <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${SYM[c.suit]}</span></span>
         <span class="rank">${c.rank}</span><span class="suit">${SYM[c.suit]}</span>
         ${powerTag(c) ? `<span class="ptag">${powerTag(c)}</span>` : ''}
       </div>`;
     })
+    .join('');
+  const selHtml = selCards
+    .map(
+      (c, i) => `<div class="card ${isRed(c) ? 'red' : 'black'} selected" data-selcard="${c.id}">
+        <span class="order-badge">${i + 1}</span>
+        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${SYM[c.suit]}</span></span>
+        <span class="rank">${c.rank}</span><span class="suit">${SYM[c.suit]}</span>
+        ${powerTag(c) ? `<span class="ptag">${powerTag(c)}</span>` : ''}
+      </div>`
+    )
     .join('');
 
   const overHtml =
@@ -402,13 +418,16 @@ function renderGame() {
         <div class="pile"><div class="fan" id="fan">${fan}</div></div>
       </div>
       <button class="declare-btn${me && me.declared ? ' called' : ''}" id="declare" ${view.canDeclare ? '' : 'disabled'}>Last Cards!</button>
+      <div class="dir-chip">${view.direction === 1 ? '↻ Clockwise' : '↺ Counter-clockwise'}</div>
     </div>
     <div class="meta-row">
-      <span class="chip">${view.direction === 1 ? '↻ Clockwise' : '↺ Counter-clockwise'}</span>
       <span class="chip turn">${turnName}</span>
     </div>
     ${banner}
-    <div class="hand" id="hand">${handHtml}</div>
+    <div class="handzone" id="handzone">
+      <div class="hand" id="hand">${handHtml}</div>
+      <div class="selrow${selected.length ? '' : ' empty'}" id="selrow">${selHtml}</div>
+    </div>
     <div class="hint ${check.ok ? 'ok' : 'err'}" id="hint">${
       selected.length
         ? check.msg || `Playing: ${selCards.map((c) => `${c.rank}${SYM[c.suit]}`).join(' → ')}`
@@ -417,8 +436,8 @@ function renderGame() {
           : ''
     }</div>
     <div class="controls">
-      <button class="primary" id="play" ${check.ok ? '' : 'disabled'}>Play${selected.length ? ` (${selected.length})` : ''}</button>
       <button class="warn" id="pickup" ${ctx !== 'none' ? '' : 'disabled'}>${pickupLabel}</button>
+      <button class="primary" id="play" ${check.ok ? '' : 'disabled'}>Play${selected.length ? ` (${selected.length})` : ''}</button>
       <button class="ghost" id="clear" ${selected.length ? '' : 'disabled'}>Clear</button>
     </div>
     <div class="log" id="log">${view.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('')}</div>
@@ -429,7 +448,11 @@ function renderGame() {
   document.querySelectorAll('#hand .card').forEach((el) => {
     el.addEventListener('pointerdown', onHandPointerDown);
   });
+  document.querySelectorAll('#selrow .card').forEach((el) => {
+    el.addEventListener('pointerdown', onSelPointerDown);
+  });
   positionHand();
+  positionSelRow();
   document.getElementById('play').onclick = onPlay;
   document.getElementById('pickup').onclick = async () => {
     const res = await emit('pickup', {});
@@ -456,10 +479,18 @@ function renderGame() {
   if (log) log.scrollTop = log.scrollHeight;
 }
 
-function toggleCard(id) {
+/* Selecting never checks legality: any card can be tapped into the
+   selected row in any order, and the row can be rearranged freely.
+   The server remains the authority — it validates the whole sequence
+   when Play is pressed and rejects an illegal one. */
+function selectCard(id) {
+  if (!selected.includes(id)) selected.push(id);
+  render();
+}
+
+function deselectCard(id) {
   const i = selected.indexOf(id);
   if (i >= 0) selected.splice(i, 1);
-  else selected.push(id);
   render();
 }
 
@@ -477,14 +508,49 @@ function syncHandOrder(hand) {
   }
 }
 
-/* Fan geometry for n cards. Centres are `step` px apart — capped so a
-   full hand overlaps by ~59%, tightening as the hand grows so ~16 cards
-   still fit a phone screen. Edge cards rotate a few degrees each around
-   a pivot below the card and droop along a shallow arc. */
-function handLayout(n) {
-  const avail = Math.min(window.innerWidth || 360, 560) - 24; // #app width minus padding
-  let step = 22;
-  if (n > 1) step = Math.min(22, Math.max(9, (avail - 54) / (n - 1)));
+/* The fan shows only unselected cards; handOrder remains the master
+   display order for the whole hand (selected cards keep their slots
+   in it, so a card sent back from the selected row lands where it
+   was). */
+function fanOrder() {
+  return handOrder.filter((id) => !selected.includes(id));
+}
+
+/* Card size steps down as the hand grows, so a big hand still fits
+   the screen: full size up to 12 cards, then progressively smaller.
+   The sizes are applied as CSS variables on the hand zone (fan +
+   selected row), so corner indices shrink with the cards but stay
+   legible. */
+function handTier(total) {
+  if (total <= 12) return { w: 54, h: 76, cidx: 13, main: 21, suit: 19 };
+  if (total <= 18) return { w: 48, h: 68, cidx: 12, main: 19, suit: 17 };
+  if (total <= 24) return { w: 42, h: 60, cidx: 11, main: 17, suit: 15 };
+  return { w: 36, h: 52, cidx: 10, main: 15, suit: 13 };
+}
+
+function applyHandTier() {
+  const total = state && state.yourHand ? state.yourHand.length : 0;
+  const T = handTier(total);
+  const zone = document.getElementById('handzone');
+  if (zone) {
+    zone.style.setProperty('--card-w', `${T.w}px`);
+    zone.style.setProperty('--card-h', `${T.h}px`);
+    zone.style.setProperty('--cidx', `${T.cidx}px`);
+    zone.style.setProperty('--hmain', `${T.main}px`);
+    zone.style.setProperty('--hsuit', `${T.suit}px`);
+  }
+  return T;
+}
+
+/* Fan geometry for n cards in a strip `availW` wide with cards `cardW`
+   wide. The step is derived from the actual strip width, so the fan
+   (cardW + (n−1) × step) can never exceed the strip: at ~59% overlap
+   for a normal hand, tightening as the hand grows. Edge cards rotate
+   a few degrees each around a pivot below the card and droop along a
+   shallow arc. */
+function handLayout(n, cardW, availW) {
+  let step = 0;
+  if (n > 1) step = Math.min(22, Math.max(4, (availW - cardW) / (n - 1)));
   const perDeg = n > 1 ? Math.min(4.2, 46 / (n - 1)) : 0;
   return { step, perDeg };
 }
@@ -496,27 +562,34 @@ function cardPos(i, n, L) {
   return { x: off * L.step, rot: off * L.perDeg, droop };
 }
 
-function previewHandOrder() {
-  const arr = handOrder.filter((id) => id !== drag.id);
+function previewFanOrder() {
+  const arr = fanOrder().filter((id) => id !== drag.id);
   arr.splice(drag.targetIdx, 0, drag.id);
   return arr;
 }
 
+/* Fold a reordered fan back into handOrder: the unselected slots are
+   refilled in the new fan order; selected cards keep their slots. */
+function commitFanOrder(newFan) {
+  const sel = new Set(selected);
+  let fi = 0;
+  handOrder = handOrder.map((id) => (sel.has(id) ? id : newFan[fi++]));
+}
+
 /* Lay out the fanned hand. Cards are absolutely positioned in the .hand
-   strip; this sets each card's transform/z-index from handOrder (or the
-   drag preview order mid-drag). Selected cards drop below the arc, so
-   the unselected cards' corner indices stay fully visible while the
-   player builds a run; the dragged card follows the pointer. Layering only (positions and
-   the player's order never change): playable cards sit in a band above
-   unplayable ones, so a card that can be played is never covered by an
-   unplayable neighbour; within each band the fan order is preserved. */
+   strip; this sets each card's transform/z-index from the fan order
+   (or the drag preview order mid-drag). Z-index is strictly the fan
+   position, left to right, like a real fanned hand — a playable card
+   no longer jumps a layer band above its neighbours (that covering
+   made runs hard to plan). The dragged card follows the pointer. */
 function positionHand() {
   const handEl = document.getElementById('hand');
   if (!handEl || !state || state.screen !== 'game') return;
-  const order = drag && drag.moved ? previewHandOrder() : handOrder;
+  const T = applyHandTier();
+  const order = drag && drag.moved ? previewFanOrder() : fanOrder();
   const n = order.length;
   if (!n) return;
-  const L = handLayout(n);
+  const L = handLayout(n, T.w, handEl.clientWidth || 320);
   handEl.querySelectorAll('.card').forEach((el) => {
     const id = el.dataset.card;
     const i = order.indexOf(id);
@@ -524,14 +597,10 @@ function positionHand() {
     const p = cardPos(i, n, L);
     let transform = `translate(${p.x}px, ${p.droop}px) rotate(${p.rot}deg)`;
     let z = i + 1;
-    if (el.classList.contains('legal')) z = 100 + i + 1; // playable band, above 'unplayable'
     if (drag && drag.moved && drag.el === el) {
       const p0 = cardPos(drag.origIdx, n, L);
       transform = `translate(${p0.x + drag.lastDx}px, ${p0.droop - 10}px) rotate(${p.rot * 0.3}deg)`;
       z = 300;
-    } else if (selected.includes(id)) {
-      transform = `translate(${p.x}px, ${p.droop + 32}px) rotate(${p.rot}deg)`;
-      z = 200;
     }
     el.style.transform = transform;
     el.style.zIndex = z;
@@ -541,9 +610,12 @@ function positionHand() {
 function onHandPointerDown(e) {
   if (drag) return;
   const el = e.currentTarget;
-  const idx = handOrder.indexOf(el.dataset.card);
+  const fan = fanOrder();
+  const idx = fan.indexOf(el.dataset.card);
   if (idx < 0) return;
-  const L = handLayout(handOrder.length);
+  const handEl = document.getElementById('hand');
+  const T = handTier(state && state.yourHand ? state.yourHand.length : fan.length);
+  const L = handLayout(fan.length, T.w, handEl ? handEl.clientWidth || 320 : 320);
   drag = {
     id: el.dataset.card,
     el,
@@ -553,7 +625,7 @@ function onHandPointerDown(e) {
     lastDx: 0,
     origIdx: idx,
     step: L.step,
-    n: handOrder.length,
+    n: fan.length,
     moved: false,
     targetIdx: idx,
   };
@@ -588,10 +660,10 @@ function endDrag(commit) {
   d.el.removeEventListener('pointermove', onHandPointerMove);
   d.el.removeEventListener('pointerup', onHandPointerUp);
   d.el.removeEventListener('pointercancel', onHandPointerCancel);
-  const preview = commit && d.moved ? previewHandOrder() : null;
+  const preview = commit && d.moved ? previewFanOrder() : null;
   drag = null;
   if (preview) {
-    handOrder = preview;
+    commitFanOrder(preview);
     renderQueued = false;
     render(); // settles the card into its new slot
   } else if (renderQueued) {
@@ -607,7 +679,7 @@ function onHandPointerUp(e) {
   if (!drag || e.pointerId !== drag.pointerId) return;
   const wasDrag = drag.moved;
   const d = endDrag(true);
-  if (d && !wasDrag) toggleCard(d.id); // a tap: press without real movement
+  if (d && !wasDrag) selectCard(d.id); // a tap: press without real movement — into the selected row
 }
 
 function onHandPointerCancel(e) {
@@ -615,7 +687,133 @@ function onHandPointerCancel(e) {
   endDrag(false);
 }
 
-window.addEventListener('resize', () => positionHand());
+// ------------------------------------------------------------- selected row
+
+/* The selected row sits below the fan: the cards about to be played,
+   left to right in play order, numbered by their order badges. Tap a
+   row card to send it back to the hand; drag it sideways to slot it
+   between its neighbours — order is fixed by rearranging here, never
+   by having to tap cards in sequence. Same Pointer Events pattern as
+   the hand drag. */
+function selRowStep(n, cardW, availW) {
+  if (n <= 1) return 0;
+  return Math.min(cardW * 0.78, Math.max(10, (availW - cardW) / (n - 1)));
+}
+
+function previewSelOrder() {
+  const arr = selected.filter((id) => id !== selDrag.id);
+  arr.splice(selDrag.targetIdx, 0, selDrag.id);
+  return arr;
+}
+
+function positionSelRow() {
+  const rowEl = document.getElementById('selrow');
+  if (!rowEl || !state || state.screen !== 'game') return;
+  const T = handTier(state.yourHand ? state.yourHand.length : selected.length);
+  const order = selDrag && selDrag.moved ? previewSelOrder() : selected;
+  const n = order.length;
+  if (!n) return;
+  const step = selRowStep(n, T.w, rowEl.clientWidth || 320);
+  rowEl.querySelectorAll('.card').forEach((el) => {
+    const id = el.dataset.selcard;
+    const i = order.indexOf(id);
+    if (i < 0) return;
+    const off = i - (n - 1) / 2;
+    let transform = `translate(${off * step}px, 0px)`;
+    let z = i + 1;
+    if (selDrag && selDrag.moved && selDrag.el === el) {
+      const o0 = selDrag.origIdx - (n - 1) / 2;
+      transform = `translate(${o0 * step + selDrag.lastDx}px, -6px)`;
+      z = 300;
+    }
+    el.style.transform = transform;
+    el.style.zIndex = z;
+  });
+}
+
+function onSelPointerDown(e) {
+  if (selDrag) return;
+  const el = e.currentTarget;
+  const idx = selected.indexOf(el.dataset.selcard);
+  if (idx < 0) return;
+  const rowEl = document.getElementById('selrow');
+  const T = handTier(state && state.yourHand ? state.yourHand.length : selected.length);
+  const step = selRowStep(selected.length, T.w, rowEl ? rowEl.clientWidth || 320 : 320) || T.w;
+  selDrag = {
+    id: el.dataset.selcard,
+    el,
+    pointerId: e.pointerId,
+    startX: e.clientX,
+    startY: e.clientY,
+    lastDx: 0,
+    origIdx: idx,
+    step,
+    n: selected.length,
+    moved: false,
+    targetIdx: idx,
+  };
+  try {
+    el.setPointerCapture(e.pointerId);
+  } catch {}
+  el.addEventListener('pointermove', onSelPointerMove);
+  el.addEventListener('pointerup', onSelPointerUp);
+  el.addEventListener('pointercancel', onSelPointerCancel);
+}
+
+function onSelPointerMove(e) {
+  if (!selDrag || e.pointerId !== selDrag.pointerId) return;
+  const dx = e.clientX - selDrag.startX;
+  const dy = e.clientY - selDrag.startY;
+  selDrag.lastDx = dx;
+  if (!selDrag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    selDrag.moved = true;
+    selDrag.el.classList.add('dragging');
+  }
+  if (selDrag.moved) {
+    e.preventDefault();
+    const t = Math.round(selDrag.origIdx + dx / selDrag.step);
+    selDrag.targetIdx = Math.max(0, Math.min(selDrag.n - 1, t));
+    positionSelRow(); // the other row cards slide to open the gap
+  }
+}
+
+function endSelDrag(commit) {
+  const d = selDrag;
+  if (!d) return null;
+  d.el.removeEventListener('pointermove', onSelPointerMove);
+  d.el.removeEventListener('pointerup', onSelPointerUp);
+  d.el.removeEventListener('pointercancel', onSelPointerCancel);
+  const preview = commit && d.moved ? previewSelOrder() : null;
+  selDrag = null;
+  if (preview) {
+    selected = preview;
+    renderQueued = false;
+    render(); // settles the card into its new position in the row
+  } else if (renderQueued) {
+    renderQueued = false;
+    render();
+  } else if (d.moved) {
+    positionSelRow(); // cancelled drag: slide everything back
+  }
+  return d;
+}
+
+function onSelPointerUp(e) {
+  if (!selDrag || e.pointerId !== selDrag.pointerId) return;
+  const wasDrag = selDrag.moved;
+  const d = endSelDrag(true);
+  if (d && !wasDrag) deselectCard(d.id); // a tap sends the card back to the hand
+}
+
+function onSelPointerCancel(e) {
+  if (!selDrag || e.pointerId !== selDrag.pointerId) return;
+  endSelDrag(false);
+}
+
+window.addEventListener('resize', () => {
+  positionHand();
+  positionSelRow();
+});
 
 async function onPlay() {
   const check = validateSelection();
@@ -655,6 +853,7 @@ function leaveRoom() {
   socket.emit('leaveRoom', {});
   state = null;
   selected = [];
+  selDrag = null;
   renderedSeq = 0;
   renderedPickupSeq = 0;
   displayedTop = [];
@@ -741,8 +940,8 @@ function animatePickup(pu) {
 
 function render() {
   // Rebuilding the DOM mid-drag would destroy the card under the
-  // pointer — defer until the drag ends (endDrag flushes this).
-  if (drag) {
+  // pointer — defer until the drag ends (endDrag/endSelDrag flush this).
+  if (drag || selDrag) {
     renderQueued = true;
     return;
   }
