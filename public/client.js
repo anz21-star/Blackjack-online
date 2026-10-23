@@ -7,7 +7,6 @@
 
 const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'];
 const SYM = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
-const SUIT_NAME = { spades: 'Spades', hearts: 'Hearts', diamonds: 'Diamonds', clubs: 'Clubs' };
 
 const socket = io();
 let state = null; // latest server state (lobby or game)
@@ -290,8 +289,20 @@ function seatEl(view, p) {
     (view.phase === 'bringback' && view.bringBack && view.bringBack.actorIdx === p.idx);
   const cls = seatClass(view, p.idx);
   const vertical = cls === 'seat-left' || cls === 'seat-right';
+  // Speech bubbles hang on the side of the seat facing into the table:
+  // above the seat normally, below it for the top seat (whose "above"
+  // would be clipped by the table's edge). "Last Cards!" and the
+  // named-suit bubble stack in the same container when both apply.
+  const suitBubble =
+    view.requiredSuit && view.suitDeclarerIdx === p.idx
+      ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${SYM[view.requiredSuit]}</span></div>`
+      : '';
+  const bubbles =
+    p.declared || suitBubble
+      ? `<div class="bubbles${cls === 'seat-top' ? ' below' : ''}">${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}${suitBubble}</div>`
+      : '';
   return `<div class="seat ${cls} ${isActor ? 'active-turn' : ''} ${p.out ? 'out' : ''}" data-seat="${p.idx}">
-    ${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}
+    ${bubbles}
     <div class="sname">${escapeHtml(p.name)}${p.isYou ? ' (you)' : ''}${p.isCPU ? '' : ''}</div>
     <div class="scount">${
       p.out
@@ -386,15 +397,14 @@ function renderGame() {
     <div class="table" id="table">
       ${seats}
       <div class="centre">
-        <div class="pile"><div class="draw-back"></div><div class="label">Draw · ${view.drawCount}</div></div>
-        <div class="pile"><div class="fan" id="fan">${fan}</div><div class="label">Discard</div></div>
+        <div class="pile"><div class="draw-back"></div><div class="label">× ${view.drawCount}</div></div>
+        <div class="pile"><div class="fan" id="fan">${fan}</div></div>
       </div>
       <button class="declare-btn${me && me.declared ? ' called' : ''}" id="declare" ${view.canDeclare ? '' : 'disabled'}>Last Cards!</button>
     </div>
     <div class="meta-row">
       <span class="chip">${view.direction === 1 ? '↻ Clockwise' : '↺ Counter-clockwise'}</span>
       <span class="chip turn">${turnName}</span>
-      ${view.requiredSuit ? `<span class="chip">Suit to follow: ${SYM[view.requiredSuit]} ${SUIT_NAME[view.requiredSuit]}</span>` : ''}
     </div>
     ${banner}
     <div class="hand" id="hand">${handHtml}</div>
@@ -519,7 +529,7 @@ function positionHand() {
       transform = `translate(${p0.x + drag.lastDx}px, ${p0.droop - 10}px) rotate(${p.rot * 0.3}deg)`;
       z = 300;
     } else if (selected.includes(id)) {
-      transform = `translate(${p.x}px, ${p.droop + 20}px) rotate(${p.rot}deg)`;
+      transform = `translate(${p.x}px, ${p.droop + 32}px) rotate(${p.rot}deg)`;
       z = 200;
     }
     el.style.transform = transform;
@@ -625,7 +635,7 @@ function renderSuitPicker() {
   modal.innerHTML = `<div class="modal"><div class="box">
     <div>Your Ace names the suit to follow:</div>
     <div class="suits">${SUITS.map(
-      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#f0a294' : '#dfe9f2'}">${SYM[s]}</button>`
+      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#f0a294' : '#34383e'}">${SYM[s]}</button>`
     ).join('')}</div>
   </div></div>`;
   modal.querySelectorAll('button').forEach((b) => {
