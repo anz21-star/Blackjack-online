@@ -60,6 +60,10 @@ function createGame(seats, startSeat) {
     key: s.key || null,
     name: s.name,
     isCPU: !!s.isCPU,
+    // Server-only: the reclaim token of the human this seat belongs to
+    // while a CPU is minding it (null for connected humans and pure CPU
+    // fill seats). Never exposed by buildView.
+    humanToken: s.humanToken || null,
     hand: [],
     out: false,
     place: null,
