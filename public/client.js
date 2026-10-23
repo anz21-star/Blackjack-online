@@ -291,21 +291,20 @@ function seatEl(view, p) {
     (view.phase === 'bringback' && view.bringBack && view.bringBack.actorIdx === p.idx);
   const cls = seatClass(view, p.idx);
   const vertical = cls === 'seat-left' || cls === 'seat-right';
-  // Speech bubbles hang on the side of the seat facing into the table:
-  // above the seat normally, but BELOW it for every seat along the
-  // table's top edge (centre-top and the two top corners) — for those
-  // seats "above" sits outside the table and is clipped away by the
-  // table's overflow, which is exactly what used to swallow the
-  // opposite player's bubbles. "Last Cards!" and the named-suit
-  // bubble stack in the same container when both apply.
-  const below = cls === 'seat-top' || cls === 'seat-topleft' || cls === 'seat-topright';
+  // Speech bubbles sit ABOVE every seat box, uniformly (the CSS
+  // anchors the stack to the seat's top edge, tail pointing down).
+  // The seats along the table's top edge are inset far enough that
+  // their stacks still render fully inside the table — no seat gets
+  // a special below-the-box placement any more. "Last Cards!" and
+  // the named-suit bubble stack in the same container when both
+  // apply.
   const suitBubble =
     view.requiredSuit && view.suitDeclarerIdx === p.idx
       ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${SYM[view.requiredSuit]}</span></div>`
       : '';
   const bubbles =
     p.declared || suitBubble
-      ? `<div class="bubbles${below ? ' below' : ''}">${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}${suitBubble}</div>`
+      ? `<div class="bubbles">${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}${suitBubble}</div>`
       : '';
   return `<div class="seat ${cls} ${isActor ? 'active-turn' : ''} ${p.out ? 'out' : ''}" data-seat="${p.idx}">
     ${bubbles}
@@ -322,6 +321,34 @@ function seatEl(view, p) {
 
 function ordinal(n) {
   return { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th' }[n] || `${n}th`;
+}
+
+/* Direction of play, drawn on the felt: one curved arrow in each open
+   quadrant between the seats, arcing the way play travels around the
+   table. Each path lives in a 56×56 box and bulges toward its
+   quadrant's outer corner; the arrowhead sits at the end play flows
+   toward, so reversing direction just swaps every arrow for its
+   mirror journey. Clockwise flow runs bottom → left → top → right
+   (through the quadrants: BL ↗, TL →, TR ↓, BR ←). No text label. */
+const DIR_PATHS = {
+  qtl: { cw: 'M 12 44 Q 12 12 44 12', ccw: 'M 44 12 Q 12 12 12 44' },
+  qtr: { cw: 'M 12 12 Q 44 12 44 44', ccw: 'M 44 44 Q 44 12 12 12' },
+  qbr: { cw: 'M 44 12 Q 44 44 12 44', ccw: 'M 12 44 Q 44 44 44 12' },
+  qbl: { cw: 'M 44 44 Q 12 44 12 12', ccw: 'M 12 12 Q 12 44 44 44' },
+};
+function dirArrowsHtml(direction) {
+  const key = direction === 1 ? 'cw' : 'ccw';
+  const defs =
+    '<svg width="0" height="0" style="position:absolute"><defs>' +
+    '<marker id="dirHead" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
+    '<path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(216,179,106,0.9)"></path></marker></defs></svg>';
+  const arrows = Object.keys(DIR_PATHS)
+    .map(
+      (q) =>
+        `<div class="dir-arrow ${q}"><svg viewBox="0 0 56 56" width="56" height="56"><path d="${DIR_PATHS[q][key]}" fill="none" stroke="rgba(216,179,106,0.55)" stroke-width="3.5" stroke-linecap="round" marker-end="url(#dirHead)"></path></svg></div>`
+    )
+    .join('');
+  return defs + arrows;
 }
 
 function renderGame() {
@@ -418,7 +445,7 @@ function renderGame() {
         <div class="pile"><div class="fan" id="fan">${fan}</div></div>
       </div>
       <button class="declare-btn${me && me.declared ? ' called' : ''}" id="declare" ${view.canDeclare ? '' : 'disabled'}>Last Cards!</button>
-      <div class="dir-chip">${view.direction === 1 ? '↻ Clockwise' : '↺ Counter-clockwise'}</div>
+      <div class="dir-arrows" aria-hidden="true">${dirArrowsHtml(view.direction)}</div>
     </div>
     <div class="meta-row">
       <span class="chip turn">${turnName}</span>
@@ -689,8 +716,9 @@ function onHandPointerCancel(e) {
 
 // ------------------------------------------------------------- selected row
 
-/* The selected row sits below the fan: the cards about to be played,
-   left to right in play order, numbered by their order badges. Tap a
+/* The selected row overlaps the bottom of the fan (CSS negative
+   margin): the cards about to be played, left to right in play
+   order, numbered by their order badges. Tap a
    row card to send it back to the hand; drag it sideways to slot it
    between its neighbours — order is fixed by rearranging here, never
    by having to tap cards in sequence. Same Pointer Events pattern as
