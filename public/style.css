@@ -147,6 +147,21 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   background: repeating-linear-gradient(45deg, #7c2d22 0 4px, #93392b 4px 8px);
   border: 1px solid #d8b36a88;
 }
+/* Opponent hands as a fan of mini card-backs (one per card, capped). */
+.opp-fan { display: inline-flex; align-items: center; }
+.opp-fan .mback {
+  width: 17px; height: 24px; border-radius: 3px; flex: none;
+  background: repeating-linear-gradient(45deg, #7c2d22 0 4px, #93392b 4px 8px);
+  border: 1px solid #d8b36a88;
+  margin-left: -10px;
+  transform: rotate(var(--r, 0deg));
+  box-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+.opp-fan .mback:first-child { margin-left: 0; }
+/* Side seats: vertical stack of sideways (rotated) backs. */
+.opp-fan.v { flex-direction: column; }
+.opp-fan.v .mback { width: 24px; height: 17px; margin-left: 0; margin-top: -9px; }
+.opp-fan.v .mback:first-child { margin-top: 0; }
 .seat.active-turn { outline: 2px solid var(--gold); }
 .seat.out { opacity: 0.55; }
 .seat-bottom { left: 50%; bottom: 8px; transform: translateX(-50%); }
@@ -203,9 +218,24 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* ---------- hand & controls ---------- */
 
 .hand-title { font-size: 18px; margin: 12px 0 6px; }
-.hand { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; min-height: var(--card-h); }
-.hand .card { cursor: pointer; transition: transform 0.12s ease; }
-.hand .card.selected { transform: translateY(-12px); outline: 2px solid var(--gold); }
+/* The local hand is a fan: cards are absolutely positioned along a
+   shallow arc by client.js (positionHand). The strip is one card tall
+   plus room for the arc droop and the selected-card lift. */
+.hand { position: relative; height: 118px; }
+.hand .card {
+  position: absolute;
+  left: 50%; top: 16px;
+  margin-left: calc(var(--card-w) / -2);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  transform-origin: 50% 140%; /* pivot just below the card: fan tilt */
+  touch-action: none; /* pointer drags must not scroll the page */
+}
+.hand .card.selected { outline: 2px solid var(--gold); }
+.hand .card.dragging { transition: none; box-shadow: 0 8px 18px rgba(0,0,0,0.5); }
+/* In the fan the next card covers the right edge, so the selection
+   order badge sits on the visible left corner instead. */
+.hand .order-badge { right: auto; left: -7px; }
 .hand .card.legal { outline: 2px solid rgba(120, 220, 150, 0.55); }
 .hand .card.dim { opacity: 0.45; }
 .order-badge {
