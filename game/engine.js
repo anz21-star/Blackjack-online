@@ -26,8 +26,11 @@
 //    Ace's power is ignored. A suit is declared only when an Ace is the
 //    only card played or the final card of a run.
 //  - "Last cards" can be called at any time before your next turn once
-//    you could finish on that next turn. Going out without ever having
-//    called = pick up 1 and stay in.
+//    you could finish on that next turn. A call covers only that one
+//    next turn: if the turn ends without you going out (you played but
+//    didn't finish, picked up voluntarily, or were made to pick up),
+//    the call resets and may be made again later in the game. Going out
+//    without an active call = pick up 1 and stay in.
 //  - A red Jack is the ONLY power card you can legally finish on.
 //    Finishing on an Ace, 2, black Jack, 8 or King = pick up 1, stay in.
 //  - Bring-backs: when a player goes out, if every remaining player in
@@ -336,6 +339,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
         state.pending = 0;
       }
       state.requiredSuit = null;
+      p.declared = false; // their turn has ended; any call is spent
       drawCards(state, idx, 1);
       pushLog(state, `${p.name} ${reason} — picks up 1 and stays in.`);
       advance(state, 1);
@@ -370,6 +374,12 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
     }
     return { ok: true };
   }
+
+  // ---- end-of-turn reset for "last cards"
+  // The player played but did not go out, and every path below advances
+  // play to someone else: their turn is over, so a "last cards" call
+  // (which covers only this one turn) resets and can be called again.
+  p.declared = false;
 
   // ---- ordinary play effects
   if (wasChain) {
@@ -451,6 +461,10 @@ function applyPickup(state, idx) {
     drawCards(state, idx, 1);
     pushLog(state, `${p.name} picked up 1.`);
   }
+  // Picking up ends the player's turn, so a "last cards" call covering
+  // this turn resets (drawCards already clears it when cards are drawn;
+  // this keeps the rule explicit and covers the nothing-to-draw edge).
+  p.declared = false;
   advance(state, 1);
   return { ok: true };
 }
