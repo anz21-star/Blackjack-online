@@ -18,7 +18,7 @@ body {
   min-height: 100vh;
 }
 
-#app { max-width: 560px; margin: 0 auto; padding: 12px 12px 32px; }
+#app { max-width: 560px; margin: 0 auto; padding: 10px 12px 24px; }
 
 h1 { text-align: center; font-size: 26px; margin: 10px 0 4px; letter-spacing: 0.5px; }
 .sub { text-align: center; opacity: 0.75; font-size: 14px; margin: 0 0 16px; }
@@ -84,8 +84,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   background: radial-gradient(ellipse at center, #11603f 0%, var(--felt) 62%, #093626 100%);
   border: 6px solid var(--rim);
   border-radius: 26px;
-  height: 380px;
-  margin-bottom: 10px;
+  height: 450px;
+  margin-bottom: 8px;
   overflow: hidden;
 }
 
@@ -99,19 +99,18 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   z-index: 1;
 }
 
-/* Direction of play, shown on the felt itself (bottom-left corner of
-   the table, clear of every seat and the centre piles). */
-.dir-chip {
-  position: absolute;
-  left: 12px; bottom: 10px;
-  z-index: 20;
-  background: rgba(0, 0, 0, 0.35);
-  color: var(--gold);
-  border: 1px solid rgba(216, 179, 106, 0.45);
-  border-radius: 999px;
-  padding: 5px 12px;
-  font-size: 13px;
-}
+/* Direction of play, shown on the felt itself: four curved arrows,
+   one in each open quadrant between the seats, each arcing the way
+   play travels around the table (client.js picks the path set for the
+   current direction). No label — the flow reads at a glance. They sit
+   above the felt but under the seats and piles' working area, and
+   never take pointer events. */
+.dir-arrows { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.dir-arrow { position: absolute; width: 56px; height: 56px; opacity: 0.85; }
+.dir-arrow.qtl { left: 19%; top: 11%; }
+.dir-arrow.qtr { right: 19%; top: 11%; }
+.dir-arrow.qbr { right: 19%; bottom: 11%; }
+.dir-arrow.qbl { left: 19%; bottom: 11%; }
 .pile { text-align: center; }
 .pile .label { font-size: 12px; opacity: 0.8; margin-top: 5px; }
 .draw-back {
@@ -127,7 +126,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .fan .card:nth-child(2) { left: 26px; transform: rotate(0deg); }
 .fan .card:nth-child(3) { left: 52px; transform: rotate(7deg); }
 
-.meta-row { display: flex; gap: 8px; justify-content: center; margin: 8px 0; flex-wrap: wrap; }
+.meta-row { display: flex; gap: 8px; justify-content: center; margin: 5px 0; flex-wrap: wrap; }
 .chip {
   background: rgba(0,0,0,0.35);
   border-radius: 999px;
@@ -160,8 +159,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   padding: 6px 6px;
   font-size: 13px;
   /* Above the centre piles layer, so a seat's speech bubbles (which
-     hang into the gap between seat and piles) are never painted over
-     by the piles. */
+     sit above the box, toward the piles for the lower seats) are
+     never painted over by the piles. */
   z-index: 6;
 }
 .seat .sname { font-weight: bold; margin-bottom: 3px; white-space: nowrap; }
@@ -194,29 +193,37 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   box-shadow: 0 0 0 2px rgba(255, 217, 122, 0.35), 0 0 16px rgba(255, 217, 122, 0.8);
 }
 .seat.out { opacity: 0.55; }
-.seat-bottom { left: 50%; bottom: 6px; transform: translateX(-50%); }
-.seat-top { left: 50%; top: 6px; transform: translateX(-50%); }
-.seat-left { left: 3px; top: 50%; transform: translateY(-50%); }
-.seat-right { right: 3px; top: 50%; transform: translateY(-50%); }
-.seat-topleft { left: 6px; top: 6px; }
-.seat-topright { right: 6px; top: 6px; }
+/* Seats are spread toward the edges of the longer table: side seats
+   flush to the rim, the bottom seat low, and the top-edge seats
+   (centre-top and the 3-player corners) inset 78px from the top —
+   exactly enough room for a full speech-bubble stack (Last Cards! +
+   the enlarged suit bubble ≈ 71px, plus its 4px gap) to sit ABOVE
+   the box and still render completely inside the table. */
+.seat-bottom { left: 50%; bottom: 4px; transform: translateX(-50%); }
+.seat-top { left: 50%; top: 78px; transform: translateX(-50%); }
+.seat-left { left: 0; top: 50%; transform: translateY(-50%); }
+.seat-right { right: 0; top: 50%; transform: translateY(-50%); }
+.seat-topleft { left: 4px; top: 78px; }
+.seat-topright { right: 4px; top: 78px; }
 
-/* Speech bubbles ("Last Cards!", the named-suit glyph) stack in a
-   container on the side of the seat facing into the table: above the
-   seat normally, below it for every seat along the table's top edge,
-   where "above" would be clipped by the table edge. The below stack
-   is anchored to the seat's bottom edge (top: 100% + a small gap),
-   not floated from the seat's bottom, so it always hangs in the open
-   gap between the seat and the centre piles. The container carries
-   the tail arrow, pointing at its seat. */
+/* Speech bubbles ("Last Cards!", the named-suit glyph) stack ABOVE
+   every player's seat box, uniformly — anchored to the seat's top
+   edge (bottom: 100% + a small gap), tail pointing down at the box.
+   The top-edge seats are inset far enough (see their positions
+   above) that their stacks still fit inside the table, and the seats
+   paint above the centre piles, so no stack is ever clipped by the
+   table's overflow or covered by the piles. */
 .bubbles {
   position: absolute;
-  left: 50%; top: -32px;
+  left: 50%; bottom: calc(100% + 4px);
   transform: translateX(-50%);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   z-index: 5;
 }
-.bubbles.below { top: calc(100% + 4px); bottom: auto; }
+/* Edge seats: nudge the stack inward so a wide bubble ("Last Cards!")
+   centred on a seat at the rim can't poke past the table's edge. */
+.seat-left .bubbles, .seat-topleft .bubbles { left: calc(50% + 8px); }
+.seat-right .bubbles, .seat-topright .bubbles { left: calc(50% - 8px); }
 .bubbles::after {
   content: '';
   position: absolute;
@@ -225,11 +232,6 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   border: 5px solid transparent;
   border-top-color: #fffbe8;
   border-bottom: 0;
-}
-.bubbles.below::after {
-  bottom: auto; top: -5px;
-  border-top: 0;
-  border-bottom-color: #fffbe8;
 }
 .bubble {
   position: relative;
@@ -245,8 +247,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* The suit a player named with their Ace, shown at their seat instead
    of as a chip under the table: bright grey for spades/clubs, bright
    red for hearts/diamonds (the picker palette), on the cream bubble. */
-.bubble.suit { padding: 4px 9px; }
-.bubble.suit .sg { font-size: 20px; line-height: 1; }
+.bubble.suit { padding: 7px 12px; }
+.bubble.suit .sg { font-size: 30px; line-height: 1; }
 .bubble.suit .sg-b { color: #2f353c; }
 .bubble.suit .sg-r { color: #ff6a52; }
 
@@ -281,11 +283,16 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 
 /* The local hand is a fan: cards are absolutely positioned along a
    shallow arc by client.js (positionHand). The strip is one card tall
-   plus room for the arc droop (16 top + card + 12 droop + margin). */
-.hand { position: relative; height: calc(var(--card-h) + 40px); margin-top: 10px; }
+   plus room for the arc droop (10 top + card + 12 droop). It is its
+   own stacking layer (z-index 1) so the overlapping selected row
+   (z-index 2) always paints over the fan, never under a stray card.
+   When every card is selected the fan is empty and the strip
+   collapses entirely — no reserved empty block above the row. */
+.hand { position: relative; z-index: 1; height: calc(var(--card-h) + 22px); margin-top: 2px; }
+.hand:empty { height: 0; margin-top: 0; }
 .hand .card {
   position: absolute;
-  left: 50%; top: 16px;
+  left: 50%; top: 10px;
   margin-left: calc(var(--card-w) / -2);
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -313,15 +320,18 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .hand .card .corner .csuit,
 .selrow .card .corner .csuit { font-size: var(--cidx, 13px); }
 
-/* The selected row: the cards about to be played, in a flat row under
-   the fan, left to right in play order. Cards are absolutely
-   positioned by client.js (positionSelRow); drag sideways to
-   reorder, tap to send a card back to the hand. */
-.selrow { position: relative; height: calc(var(--card-h) + 24px); margin-top: 2px; }
+/* The selected row: the cards about to be played, in a flat row that
+   overlaps the bottom of the fan (negative top margin — enough to
+   sit close over the hand's lower edge without burying the fan
+   cards' corner indices, which live at their tops). Left to right in
+   play order; cards are absolutely positioned by client.js
+   (positionSelRow); drag sideways to reorder, tap to send a card
+   back to the hand. */
+.selrow { position: relative; z-index: 2; height: calc(var(--card-h) + 14px); margin-top: -32px; }
 .selrow.empty { display: none; }
 .selrow .card {
   position: absolute;
-  left: 50%; top: 8px;
+  left: 50%; top: 6px;
   margin-left: calc(var(--card-w) / -2);
   cursor: pointer;
   transition: transform 0.15s ease;
@@ -347,6 +357,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* Title row on the game screen; the exit button sits right-aligned
    against it, clear of the table below. */
 .game-head { position: relative; }
+.game-head h1 { margin: 2px 0; }
 .exit-btn {
   position: absolute; right: 0; top: 50%; transform: translateY(-50%);
   width: 36px; height: 36px; padding: 0;
@@ -374,8 +385,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    bright so the call still reads clearly; it just isn't pressable. */
 .declare-btn.called:disabled { opacity: 1; }
 
-.controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
-.hint { text-align: center; font-size: 14px; min-height: 20px; margin: 6px 0; }
+.controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0 2px; }
+.hint { text-align: center; font-size: 14px; min-height: 18px; margin: 4px 0; }
 .hint.err { color: #f0a294; }
 .hint.ok { color: #bfe6c8; }
 
@@ -385,9 +396,9 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   padding: 10px 14px;
   font-size: 14px;
   line-height: 1.5;
-  max-height: 170px;
+  max-height: 118px;
   overflow-y: auto;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 .log div { opacity: 0.92; }
 
