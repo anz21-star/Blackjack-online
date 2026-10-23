@@ -94,7 +94,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   left: 50%; top: 50%;
   transform: translate(-50%, -50%);
   display: flex;
-  gap: 26px;
+  gap: 16px;
   align-items: flex-start;
 }
 .pile { text-align: center; }
@@ -106,11 +106,11 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   border: 2px solid #d8b36a88;
   margin: 0 auto;
 }
-.fan { position: relative; width: 120px; height: var(--card-h); margin: 0 auto; }
+.fan { position: relative; width: 106px; height: var(--card-h); margin: 0 auto; }
 .fan .card { position: absolute; top: 0; }
 .fan .card:nth-child(1) { left: 0; transform: rotate(-7deg); }
-.fan .card:nth-child(2) { left: 30px; transform: rotate(0deg); }
-.fan .card:nth-child(3) { left: 60px; transform: rotate(7deg); }
+.fan .card:nth-child(2) { left: 26px; transform: rotate(0deg); }
+.fan .card:nth-child(3) { left: 52px; transform: rotate(7deg); }
 
 .meta-row { display: flex; gap: 8px; justify-content: center; margin: 8px 0; flex-wrap: wrap; }
 .chip {
@@ -131,9 +131,14 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 
 /* ---------- seats ---------- */
 
+/* All four seat boxes are the same size, content centred. The side
+   seats sit flush to the table edges so the left seat clears the
+   draw pile. */
 .seat {
   position: absolute;
-  min-width: 86px;
+  width: 100px;
+  height: 104px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center;
   background: rgba(0,0,0,0.28);
   border-radius: 12px;
@@ -153,23 +158,24 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   width: 17px; height: 24px; border-radius: 3px; flex: none;
   background: repeating-linear-gradient(45deg, #7c2d22 0 4px, #93392b 4px 8px);
   border: 1px solid #d8b36a88;
-  margin-left: -10px;
+  margin-left: -11px;
   transform: rotate(var(--r, 0deg));
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
 .opp-fan .mback:first-child { margin-left: 0; }
-/* Side seats: vertical stack of sideways (rotated) backs. */
+/* Side seats: vertical stack of sideways (rotated) backs, overlapped
+   tightly enough that a full fan fits the fixed seat box. */
 .opp-fan.v { flex-direction: column; }
-.opp-fan.v .mback { width: 24px; height: 17px; margin-left: 0; margin-top: -9px; }
+.opp-fan.v .mback { width: 24px; height: 17px; margin-left: 0; margin-top: -12px; }
 .opp-fan.v .mback:first-child { margin-top: 0; }
 .seat.active-turn { outline: 2px solid var(--gold); }
 .seat.out { opacity: 0.55; }
-.seat-bottom { left: 50%; bottom: 8px; transform: translateX(-50%); }
-.seat-top { left: 50%; top: 8px; transform: translateX(-50%); }
-.seat-left { left: 8px; top: 50%; transform: translateY(-50%); }
-.seat-right { right: 8px; top: 50%; transform: translateY(-50%); }
-.seat-topleft { left: 8px; top: 8px; }
-.seat-topright { right: 8px; top: 8px; }
+.seat-bottom { left: 50%; bottom: 6px; transform: translateX(-50%); }
+.seat-top { left: 50%; top: 6px; transform: translateX(-50%); }
+.seat-left { left: 3px; top: 50%; transform: translateY(-50%); }
+.seat-right { right: 3px; top: 50%; transform: translateY(-50%); }
+.seat-topleft { left: 6px; top: 6px; }
+.seat-topright { right: 6px; top: 6px; }
 
 .bubble {
   position: absolute;
@@ -237,7 +243,21 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    order badge sits on the visible left corner instead. */
 .hand .order-badge { right: auto; left: -7px; }
 .hand .card.legal { outline: 2px solid rgba(120, 220, 150, 0.55); }
-.hand .card.dim { opacity: 0.45; }
+/* Unplayable cards stay fully opaque but muted to a half tone; the
+   rank, suit and power text remain clearly readable. (Playable cards
+   also layer above these in the fan — see positionHand in client.js.) */
+.hand .card.unplayable { filter: grayscale(0.8) brightness(0.82); }
+/* Compact corner index on hand cards: rank over suit in the top-left,
+   in the suit colour (inherited from .card.red/.black), sitting on the
+   strip of the card the fan leaves visible so every card can be
+   identified at a glance. */
+.hand .card .corner {
+  position: absolute; top: 2px; left: 3px;
+  display: flex; flex-direction: column; align-items: center;
+  line-height: 1; z-index: 3; pointer-events: none;
+}
+.hand .card .corner .crank { font-size: 10px; font-weight: bold; }
+.hand .card .corner .csuit { font-size: 9px; }
 .order-badge {
   position: absolute; top: -7px; right: -7px;
   background: var(--gold); color: #333;
