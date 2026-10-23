@@ -23,7 +23,7 @@ const SUIT_SHAPES = {
   diamonds: '<path d="M50 5 L87 50 L50 95 L13 50 Z"/>',
   clubs:
     '<circle cx="50" cy="31" r="19.5"/><circle cx="30" cy="57" r="18.5"/><circle cx="70" cy="57" r="18.5"/>' +
-    '<path d="M47 52 C46 68 42 82 34 94 L66 94 C58 82 54 68 53 52 Z"/>',
+    '<path d="M46 48 C46 66 42 82 34 94 L66 94 C58 82 54 66 54 48 Z"/>',
 };
 function suitIcon(suit) {
   return `<svg class="suit-icon" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false">${SUIT_SHAPES[suit]}</svg>`;
