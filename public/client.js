@@ -379,13 +379,17 @@ function renderGame() {
       : '';
 
   $app.innerHTML = `
-    <h1>Blackjack</h1>
+    <div class="game-head">
+      <h1>Blackjack</h1>
+      <button class="exit-btn" id="leave" type="button" aria-label="Leave room" title="Leave room"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#d8b36a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button>
+    </div>
     <div class="table" id="table">
       ${seats}
       <div class="centre">
         <div class="pile"><div class="draw-back"></div><div class="label">Draw · ${view.drawCount}</div></div>
         <div class="pile"><div class="fan" id="fan">${fan}</div><div class="label">Discard</div></div>
       </div>
+      <button class="declare-btn${me && me.declared ? ' called' : ''}" id="declare" ${view.canDeclare ? '' : 'disabled'}>Last Cards!</button>
     </div>
     <div class="meta-row">
       <span class="chip">${view.direction === 1 ? '↻ Clockwise' : '↺ Counter-clockwise'}</span>
@@ -393,7 +397,6 @@ function renderGame() {
       ${view.requiredSuit ? `<span class="chip">Suit to follow: ${SYM[view.requiredSuit]} ${SUIT_NAME[view.requiredSuit]}</span>` : ''}
     </div>
     ${banner}
-    <div class="hand-title">Your hand · ${view.yourHand.length}</div>
     <div class="hand" id="hand">${handHtml}</div>
     <div class="hint ${check.ok ? 'ok' : 'err'}" id="hint">${
       selected.length
@@ -405,12 +408,8 @@ function renderGame() {
     <div class="controls">
       <button class="primary" id="play" ${check.ok ? '' : 'disabled'}>Play${selected.length ? ` (${selected.length})` : ''}</button>
       <button class="warn" id="pickup" ${ctx !== 'none' ? '' : 'disabled'}>${pickupLabel}</button>
-      <button id="declare" ${view.canDeclare ? '' : 'disabled'}>${
-        me && me.declared ? 'Last cards called ✓' : 'Call "last cards"'
-      }</button>
       <button class="ghost" id="clear" ${selected.length ? '' : 'disabled'}>Clear</button>
     </div>
-    <div class="center-text"><button class="ghost" id="leave">Leave room</button></div>
     <div class="log" id="log">${view.log.map((l) => `<div>${escapeHtml(l)}</div>`).join('')}</div>
     ${overHtml}
     <div id="suit-modal"></div>`;
@@ -494,8 +493,9 @@ function previewHandOrder() {
 
 /* Lay out the fanned hand. Cards are absolutely positioned in the .hand
    strip; this sets each card's transform/z-index from handOrder (or the
-   drag preview order mid-drag). Selected cards lift clear of the arc;
-   the dragged card follows the pointer. Layering only (positions and
+   drag preview order mid-drag). Selected cards drop below the arc, so
+   the unselected cards' corner indices stay fully visible while the
+   player builds a run; the dragged card follows the pointer. Layering only (positions and
    the player's order never change): playable cards sit in a band above
    unplayable ones, so a card that can be played is never covered by an
    unplayable neighbour; within each band the fan order is preserved. */
@@ -519,7 +519,7 @@ function positionHand() {
       transform = `translate(${p0.x + drag.lastDx}px, ${p0.droop - 10}px) rotate(${p.rot * 0.3}deg)`;
       z = 300;
     } else if (selected.includes(id)) {
-      transform = `translate(${p.x}px, ${p.droop - 14}px) rotate(${p.rot}deg)`;
+      transform = `translate(${p.x}px, ${p.droop + 20}px) rotate(${p.rot}deg)`;
       z = 200;
     }
     el.style.transform = transform;
