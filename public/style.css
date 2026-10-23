@@ -177,21 +177,20 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .seat-topleft { left: 6px; top: 6px; }
 .seat-topright { right: 6px; top: 6px; }
 
-.bubble {
+/* Speech bubbles ("Last Cards!", the named-suit glyph) stack in a
+   container on the side of the seat facing into the table: above the
+   seat normally, below it for the top seat, where "above" would be
+   clipped by the table edge. The container carries the tail arrow,
+   pointing at its seat. */
+.bubbles {
   position: absolute;
-  left: 50%; top: -30px;
+  left: 50%; top: -32px;
   transform: translateX(-50%);
-  background: #fffbe8;
-  color: #333;
-  font-size: 12px;
-  font-weight: bold;
-  padding: 4px 9px;
-  border-radius: 12px;
-  white-space: nowrap;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
   z-index: 5;
 }
-.bubble::after {
+.bubbles.below { top: auto; bottom: -32px; }
+.bubbles::after {
   content: '';
   position: absolute;
   left: 50%; bottom: -5px;
@@ -200,6 +199,29 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   border-top-color: #fffbe8;
   border-bottom: 0;
 }
+.bubbles.below::after {
+  bottom: auto; top: -5px;
+  border-top: 0;
+  border-bottom-color: #fffbe8;
+}
+.bubble {
+  position: relative;
+  background: #fffbe8;
+  color: #333;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 4px 9px;
+  border-radius: 12px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+/* The suit a player named with their Ace, shown at their seat instead
+   of as a chip under the table: faded black for spades/clubs, the
+   faded red for hearts/diamonds, on the cream bubble. */
+.bubble.suit { padding: 3px 8px; }
+.bubble.suit .sg { font-size: 15px; line-height: 1; }
+.bubble.suit .sg-b { color: #34383e; }
+.bubble.suit .sg-r { color: #e58e7d; }
 
 /* ---------- cards ---------- */
 
@@ -226,8 +248,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* The local hand is a fan: cards are absolutely positioned along a
    shallow arc by client.js (positionHand). The strip is one card tall
    plus room for the arc droop and the selected-card drop below the
-   arc (16 top + 76 card + 12 droop + 20 drop + badge ≈ 131px). */
-.hand { position: relative; height: 140px; margin-top: 10px; }
+   arc (16 top + 76 card + 12 droop + 32 drop + badge ≈ 143px). */
+.hand { position: relative; height: 152px; margin-top: 10px; }
 .hand .card {
   position: absolute;
   left: 50%; top: 16px;
@@ -257,8 +279,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   display: flex; flex-direction: column; align-items: center;
   line-height: 1; z-index: 3; pointer-events: none;
 }
-.hand .card .corner .crank { font-size: 10px; font-weight: bold; }
-.hand .card .corner .csuit { font-size: 9px; }
+.hand .card .corner .crank { font-size: 13px; font-weight: bold; }
+.hand .card .corner .csuit { font-size: 13px; }
 .order-badge {
   position: absolute; top: -7px; right: -7px;
   background: var(--gold); color: #333;
@@ -337,7 +359,10 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   max-width: 88vw;
 }
 .suits { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
-.suits button { font-size: 26px; padding: 8px 16px; }
+/* Picker circles: a lighter green than the panel buttons, with big
+   suit glyphs — faded black for spades/clubs, faded red for
+   hearts/diamonds (the colours are set inline per suit). */
+.suits button { font-size: 42px; line-height: 1; padding: 10px 16px; min-width: 66px; background: #1e7d54; }
 
 #toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
