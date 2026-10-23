@@ -220,8 +220,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    faded red for hearts/diamonds, on the cream bubble. */
 .bubble.suit { padding: 3px 8px; }
 .bubble.suit .sg { font-size: 15px; line-height: 1; }
-.bubble.suit .sg-b { color: #34383e; }
-.bubble.suit .sg-r { color: #e58e7d; }
+.bubble.suit .sg-b { color: #707882; }
+.bubble.suit .sg-r { color: #f86c56; }
 
 /* ---------- cards ---------- */
 
@@ -362,7 +362,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* Picker circles: a lighter green than the panel buttons, with big
    suit glyphs — faded black for spades/clubs, faded red for
    hearts/diamonds (the colours are set inline per suit). */
-.suits button { font-size: 42px; line-height: 1; padding: 10px 16px; min-width: 66px; background: #1e7d54; }
+.suits button { font-size: 42px; line-height: 1; padding: 10px 16px; min-width: 66px; background: #5ecb8f; }
 
 #toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
