@@ -216,12 +216,14 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   box-shadow: 0 2px 6px rgba(0,0,0,0.4);
 }
 /* The suit a player named with their Ace, shown at their seat instead
-   of as a chip under the table: faded black for spades/clubs, the
-   faded red for hearts/diamonds, on the cream bubble. */
+   of as a chip under the table: bright grey for spades/clubs, bright
+   red for hearts/diamonds (the picker palette), on the cream bubble.
+   The icon is the shared SVG, coloured via currentColor. */
 .bubble.suit { padding: 3px 8px; }
-.bubble.suit .sg { font-size: 15px; line-height: 1; }
-.bubble.suit .sg-b { color: #707882; }
-.bubble.suit .sg-r { color: #f86c56; }
+.bubble.suit .sg { display: inline-flex; line-height: 0; }
+.bubble.suit .sg svg { width: 15px; height: 15px; display: block; }
+.bubble.suit .sg-b { color: #8a939e; }
+.bubble.suit .sg-r { color: #ff7a5c; }
 
 /* ---------- cards ---------- */
 
@@ -238,7 +240,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   user-select: none;
 }
 .card .rank { font-size: 21px; font-weight: bold; line-height: 1; }
-.card .suit { font-size: 19px; line-height: 1.1; }
+.card .suit { line-height: 0; }
+.card .suit svg { width: 19px; height: 19px; display: block; }
 .card .ptag { font-size: 6.5px; letter-spacing: 0.4px; text-align: center; color: #7a6435; margin-top: auto; text-transform: uppercase; }
 .card.red { color: #b3342a; }
 .card.black { color: #22303c; }
@@ -280,7 +283,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   line-height: 1; z-index: 3; pointer-events: none;
 }
 .hand .card .corner .crank { font-size: 13px; font-weight: bold; }
-.hand .card .corner .csuit { font-size: 13px; }
+.hand .card .corner .csuit { line-height: 0; }
+.hand .card .corner .csuit svg { width: 13px; height: 13px; display: block; }
 .order-badge {
   position: absolute; top: -7px; right: -7px;
   background: var(--gold); color: #333;
@@ -359,10 +363,12 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   max-width: 88vw;
 }
 .suits { display: flex; gap: 10px; justify-content: center; margin-top: 10px; }
-/* Picker circles: a lighter green than the panel buttons, with big
-   suit glyphs — faded black for spades/clubs, faded red for
-   hearts/diamonds (the colours are set inline per suit). */
-.suits button { font-size: 42px; line-height: 1; padding: 10px 16px; min-width: 66px; background: #5ecb8f; }
+/* Picker circles: a bright light green, with big suit icons — bright
+   grey for spades/clubs, bright red for hearts/diamonds (the colours
+   are set inline per suit). The icons are the shared SVG shapes, the
+   same as the ones on the card faces. */
+.suits button { line-height: 1; padding: 10px 16px; min-width: 66px; background: #7ad9a3; }
+.suits button svg { width: 42px; height: 42px; display: block; }
 
 #toast {
   position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%);
