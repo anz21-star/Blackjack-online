@@ -8,6 +8,27 @@
 const SUITS = ['spades', 'hearts', 'diamonds', 'clubs'];
 const SYM = { spades: '♠', hearts: '♥', diamonds: '♦', clubs: '♣' };
 
+/* One shared set of suit shapes for every icon in the UI (card faces,
+   the Ace suit picker, the named-suit seat bubble), drawn as inline SVG
+   so the shapes are identical everywhere instead of depending on the
+   platform's font glyphs. Classic playing-card silhouettes on a
+   100×100 grid; the fill is currentColor, so each context colours the
+   icon through its normal text colour. SYM above stays for text (the
+   "Playing: …" line and other strings). */
+const SUIT_SHAPES = {
+  spades:
+    '<path d="M50 6 C40 22 10 38 10 60 C10 71 18 79 27 79 C35 79 41 75 45 69 C44 79 40 88 33 94 L67 94 C60 88 56 79 55 69 C59 75 65 79 73 79 C82 79 90 71 90 60 C90 38 60 22 50 6 Z"/>',
+  hearts:
+    '<path d="M50 90 C28 70 10 54 10 34 C10 20 20 10 32 10 C41 10 47 15 50 23 C53 15 59 10 68 10 C80 10 90 20 90 34 C90 54 72 70 50 90 Z"/>',
+  diamonds: '<path d="M50 5 L87 50 L50 95 L13 50 Z"/>',
+  clubs:
+    '<circle cx="50" cy="28" r="18"/><circle cx="29" cy="58" r="17"/><circle cx="71" cy="58" r="17"/>' +
+    '<path d="M46 52 C45 68 41 82 32 94 L68 94 C59 82 55 68 54 52 Z"/>',
+};
+function suitIcon(suit) {
+  return `<svg class="suit-icon" viewBox="0 0 100 100" fill="currentColor" aria-hidden="true" focusable="false">${SUIT_SHAPES[suit]}</svg>`;
+}
+
 const socket = io();
 let state = null; // latest server state (lobby or game)
 let selected = []; // card ids, in tap order
@@ -263,7 +284,7 @@ function cardEl(card, extra) {
   const colour = isRed(card) ? 'red' : 'black';
   const tag = powerTag(card);
   return `<div class="card ${colour} ${extra || ''}">
-    <span class="rank">${card.rank}</span><span class="suit">${SYM[card.suit]}</span>
+    <span class="rank">${card.rank}</span><span class="suit">${suitIcon(card.suit)}</span>
     ${tag ? `<span class="ptag">${tag}</span>` : ''}
   </div>`;
 }
@@ -295,7 +316,7 @@ function seatEl(view, p) {
   // named-suit bubble stack in the same container when both apply.
   const suitBubble =
     view.requiredSuit && view.suitDeclarerIdx === p.idx
-      ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${SYM[view.requiredSuit]}</span></div>`
+      ? `<div class="bubble suit"><span class="sg ${isRed({ suit: view.requiredSuit }) ? 'sg-r' : 'sg-b'}">${suitIcon(view.requiredSuit)}</span></div>`
       : '';
   const bubbles =
     p.declared || suitBubble
@@ -368,8 +389,8 @@ function renderGame() {
         selected.length === 0 && ctx !== 'none' ? (playable ? 'legal' : 'unplayable') : ''
       }" data-card="${c.id}">
         ${selIdx >= 0 ? `<span class="order-badge">${selIdx + 1}</span>` : ''}
-        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${SYM[c.suit]}</span></span>
-        <span class="rank">${c.rank}</span><span class="suit">${SYM[c.suit]}</span>
+        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${suitIcon(c.suit)}</span></span>
+        <span class="rank">${c.rank}</span><span class="suit">${suitIcon(c.suit)}</span>
         ${powerTag(c) ? `<span class="ptag">${powerTag(c)}</span>` : ''}
       </div>`;
     })
@@ -635,7 +656,7 @@ function renderSuitPicker() {
   modal.innerHTML = `<div class="modal"><div class="box">
     <div>Your Ace names the suit to follow:</div>
     <div class="suits">${SUITS.map(
-      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#f86c56' : '#707882'}">${SYM[s]}</button>`
+      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#ff7a5c' : '#8a939e'}">${suitIcon(s)}</button>`
     ).join('')}</div>
   </div></div>`;
   modal.querySelectorAll('button').forEach((b) => {
