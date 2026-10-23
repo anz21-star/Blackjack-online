@@ -96,6 +96,21 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   display: flex;
   gap: 16px;
   align-items: flex-start;
+  z-index: 1;
+}
+
+/* Direction of play, shown on the felt itself (bottom-left corner of
+   the table, clear of every seat and the centre piles). */
+.dir-chip {
+  position: absolute;
+  left: 12px; bottom: 10px;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.35);
+  color: var(--gold);
+  border: 1px solid rgba(216, 179, 106, 0.45);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 13px;
 }
 .pile { text-align: center; }
 .pile .label { font-size: 12px; opacity: 0.8; margin-top: 5px; }
@@ -144,6 +159,10 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   border-radius: 12px;
   padding: 6px 6px;
   font-size: 13px;
+  /* Above the centre piles layer, so a seat's speech bubbles (which
+     hang into the gap between seat and piles) are never painted over
+     by the piles. */
+  z-index: 6;
 }
 .seat .sname { font-weight: bold; margin-bottom: 3px; white-space: nowrap; }
 .seat .scount { display: flex; align-items: center; gap: 5px; justify-content: center; }
@@ -168,7 +187,12 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .opp-fan.v { flex-direction: column; }
 .opp-fan.v .mback { width: 20px; height: 14px; margin-left: 0; margin-top: -10px; }
 .opp-fan.v .mback:first-child { margin-top: 0; }
-.seat.active-turn { outline: 2px solid var(--gold); }
+/* Whose turn it is: a brighter, bolder gold than the standard trim,
+   with a soft glow, so the active seat is unmistakable at a glance. */
+.seat.active-turn {
+  outline: 3px solid #ffd97a;
+  box-shadow: 0 0 0 2px rgba(255, 217, 122, 0.35), 0 0 16px rgba(255, 217, 122, 0.8);
+}
 .seat.out { opacity: 0.55; }
 .seat-bottom { left: 50%; bottom: 6px; transform: translateX(-50%); }
 .seat-top { left: 50%; top: 6px; transform: translateX(-50%); }
@@ -179,9 +203,12 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 
 /* Speech bubbles ("Last Cards!", the named-suit glyph) stack in a
    container on the side of the seat facing into the table: above the
-   seat normally, below it for the top seat, where "above" would be
-   clipped by the table edge. The container carries the tail arrow,
-   pointing at its seat. */
+   seat normally, below it for every seat along the table's top edge,
+   where "above" would be clipped by the table edge. The below stack
+   is anchored to the seat's bottom edge (top: 100% + a small gap),
+   not floated from the seat's bottom, so it always hangs in the open
+   gap between the seat and the centre piles. The container carries
+   the tail arrow, pointing at its seat. */
 .bubbles {
   position: absolute;
   left: 50%; top: -32px;
@@ -189,7 +216,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   z-index: 5;
 }
-.bubbles.below { top: auto; bottom: -32px; }
+.bubbles.below { top: calc(100% + 4px); bottom: auto; }
 .bubbles::after {
   content: '';
   position: absolute;
@@ -218,8 +245,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* The suit a player named with their Ace, shown at their seat instead
    of as a chip under the table: bright grey for spades/clubs, bright
    red for hearts/diamonds (the picker palette), on the cream bubble. */
-.bubble.suit { padding: 3px 8px; }
-.bubble.suit .sg { font-size: 15px; line-height: 1; }
+.bubble.suit { padding: 4px 9px; }
+.bubble.suit .sg { font-size: 20px; line-height: 1; }
 .bubble.suit .sg-b { color: #2f353c; }
 .bubble.suit .sg-r { color: #ff6a52; }
 
@@ -245,11 +272,17 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 
 /* ---------- hand & controls ---------- */
 
+/* The hand zone wraps the fan and the selected row. client.js sets
+   --card-w/--card-h (and the index/glyph sizes) on it from the hand
+   size, so big hands shrink to fit; the :root values are the
+   full-size default. */
+.handzone .card .rank { font-size: var(--hmain, 21px); }
+.handzone .card .suit { font-size: var(--hsuit, 19px); }
+
 /* The local hand is a fan: cards are absolutely positioned along a
    shallow arc by client.js (positionHand). The strip is one card tall
-   plus room for the arc droop and the selected-card drop below the
-   arc (16 top + 76 card + 12 droop + 32 drop + badge ≈ 143px). */
-.hand { position: relative; height: 152px; margin-top: 10px; }
+   plus room for the arc droop (16 top + card + 12 droop + margin). */
+.hand { position: relative; height: calc(var(--card-h) + 40px); margin-top: 10px; }
 .hand .card {
   position: absolute;
   left: 50%; top: 16px;
@@ -259,28 +292,46 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   transform-origin: 50% 140%; /* pivot just below the card: fan tilt */
   touch-action: none; /* pointer drags must not scroll the page */
 }
-.hand .card.selected { outline: 2px solid var(--gold); }
 .hand .card.dragging { transition: none; box-shadow: 0 8px 18px rgba(0,0,0,0.5); }
-/* The selection order badge hangs off the card's bottom-left corner:
-   clear of the top-left corner index and of the centred power text,
-   and visible now that selected cards drop below the fan. */
-.hand .order-badge { top: auto; right: auto; bottom: -7px; left: -7px; }
 .hand .card.legal { outline: 2px solid rgba(120, 220, 150, 0.55); }
 /* Unplayable cards stay fully opaque but muted to a half tone; the
-   rank, suit and power text remain clearly readable. (Playable cards
-   also layer above these in the fan — see positionHand in client.js.) */
+   rank, suit and power text remain clearly readable. (Layering in the
+   fan is strictly left-to-right fan order — no playability band.) */
 .hand .card.unplayable { filter: grayscale(0.8) brightness(0.82); }
 /* Compact corner index on hand cards: rank over suit in the top-left,
    in the suit colour (inherited from .card.red/.black), sitting on the
    strip of the card the fan leaves visible so every card can be
    identified at a glance. */
-.hand .card .corner {
+.hand .card .corner,
+.selrow .card .corner {
   position: absolute; top: 2px; left: 3px;
   display: flex; flex-direction: column; align-items: center;
   line-height: 1; z-index: 3; pointer-events: none;
 }
-.hand .card .corner .crank { font-size: 13px; font-weight: bold; }
-.hand .card .corner .csuit { font-size: 13px; }
+.hand .card .corner .crank,
+.selrow .card .corner .crank { font-size: var(--cidx, 13px); font-weight: bold; }
+.hand .card .corner .csuit,
+.selrow .card .corner .csuit { font-size: var(--cidx, 13px); }
+
+/* The selected row: the cards about to be played, in a flat row under
+   the fan, left to right in play order. Cards are absolutely
+   positioned by client.js (positionSelRow); drag sideways to
+   reorder, tap to send a card back to the hand. */
+.selrow { position: relative; height: calc(var(--card-h) + 24px); margin-top: 2px; }
+.selrow.empty { display: none; }
+.selrow .card {
+  position: absolute;
+  left: 50%; top: 8px;
+  margin-left: calc(var(--card-w) / -2);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  touch-action: none; /* pointer drags must not scroll the page */
+}
+.selrow .card.selected { outline: 2px solid var(--gold); }
+.selrow .card.dragging { transition: none; box-shadow: 0 8px 18px rgba(0,0,0,0.5); }
+/* The play-order badge hangs off the row card's bottom-left corner:
+   clear of the top-left corner index and of the centred power text. */
+.selrow .order-badge { top: auto; right: auto; bottom: -7px; left: -7px; }
 .order-badge {
   position: absolute; top: -7px; right: -7px;
   background: var(--gold); color: #333;
