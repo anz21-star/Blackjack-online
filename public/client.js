@@ -17,6 +17,14 @@ let displayedTop = []; // discard fan contents (lags during play animation)
 let fanTimer = null;
 let suitPickFor = null; // cardIds awaiting a declared suit
 
+/* Display order for the local hand (card ids), drag-reorderable.
+   Purely presentational: the play selection is still `selected`, in tap
+   order, and the server never sees this order. */
+let handOrder = [];
+let drag = null; // in-progress hand-card pointer drag, or null
+let renderQueued = false; // a render() arrived mid-drag and is deferred
+const DRAG_THRESHOLD = 8; // px of pointer movement that turns a tap into a drag
+
 const $app = document.getElementById('app');
 const $toast = document.getElementById('toast');
 
@@ -261,17 +269,36 @@ function cardEl(card, extra) {
   </div>`;
 }
 
+/* An opponent's hand as a little fan of card-backs instead of a count:
+   one mini back per card, tightly overlapped, capped so a huge hand
+   still reads as "lots" without overflowing the seat. Side seats get a
+   vertical stack of sideways (rotated) backs. */
+const OPP_FAN_CAP = 10;
+function oppFanHtml(count, vertical) {
+  const n = Math.max(0, Math.min(count, OPP_FAN_CAP));
+  let backs = '';
+  for (let i = 0; i < n; i++) {
+    const rot = n > 1 ? (i - (n - 1) / 2) * 3 : 0;
+    backs += `<span class="mback" style="--r:${rot.toFixed(1)}deg"></span>`;
+  }
+  return `<span class="opp-fan${vertical ? ' v' : ''}">${backs}</span>`;
+}
+
 function seatEl(view, p) {
   const isActor =
     (view.phase === 'playing' && view.currentIdx === p.idx) ||
     (view.phase === 'bringback' && view.bringBack && view.bringBack.actorIdx === p.idx);
-  return `<div class="seat ${seatClass(view, p.idx)} ${isActor ? 'active-turn' : ''} ${p.out ? 'out' : ''}" data-seat="${p.idx}">
+  const cls = seatClass(view, p.idx);
+  const vertical = cls === 'seat-left' || cls === 'seat-right';
+  return `<div class="seat ${cls} ${isActor ? 'active-turn' : ''} ${p.out ? 'out' : ''}" data-seat="${p.idx}">
     ${p.declared ? '<div class="bubble">Last Cards!</div>' : ''}
     <div class="sname">${escapeHtml(p.name)}${p.isYou ? ' (you)' : ''}${p.isCPU ? '' : ''}</div>
     <div class="scount">${
       p.out
         ? `<span>${p.place ? ordinal(p.place) + ' place' : 'Out'}</span>`
-        : `<span class="mini-back"></span><span>× ${p.cardCount}</span>${p.isCPU ? '' : p.connected ? '' : ' (away)'}`
+        : p.isYou
+          ? `<span class="mini-back"></span><span>× ${p.cardCount}</span>`
+          : `${oppFanHtml(p.cardCount, vertical)}${p.isCPU ? '' : p.connected ? '' : '<span> (away)</span>'}`
     }</div>
   </div>`;
 }
@@ -319,7 +346,10 @@ function renderGame() {
         ? `Pick up ${view.pending}`
         : 'Pick up 1';
 
-  const handHtml = view.yourHand
+  syncHandOrder(view.yourHand);
+  const byId = new Map(view.yourHand.map((c) => [c.id, c]));
+  const orderedHand = handOrder.map((id) => byId.get(id)).filter(Boolean);
+  const handHtml = orderedHand
     .map((c) => {
       const selIdx = selected.indexOf(c.id);
       const playable = selected.length === 0 ? isCardPlayableFirst(c) : false;
@@ -386,8 +416,9 @@ function renderGame() {
 
   // wire up
   document.querySelectorAll('#hand .card').forEach((el) => {
-    el.onclick = () => toggleCard(el.dataset.card);
+    el.addEventListener('pointerdown', onHandPointerDown);
   });
+  positionHand();
   document.getElementById('play').onclick = onPlay;
   document.getElementById('pickup').onclick = async () => {
     const res = await emit('pickup', {});
@@ -420,6 +451,155 @@ function toggleCard(id) {
   else selected.push(id);
   render();
 }
+
+// ------------------------------------------------------------- hand fan & drag reorder
+
+/* Keep handOrder in step with the server's hand: cards no longer held
+   drop out (relative order of the rest is preserved), cards newly held
+   append at the end in server order. */
+function syncHandOrder(hand) {
+  const held = new Set(hand.map((c) => c.id));
+  handOrder = handOrder.filter((id) => held.has(id));
+  const known = new Set(handOrder);
+  for (const c of hand) {
+    if (!known.has(c.id)) handOrder.push(c.id);
+  }
+}
+
+/* Fan geometry for n cards. Centres are `step` px apart — capped so a
+   full hand overlaps by ~59%, tightening as the hand grows so ~16 cards
+   still fit a phone screen. Edge cards rotate a few degrees each around
+   a pivot below the card and droop along a shallow arc. */
+function handLayout(n) {
+  const avail = Math.min(window.innerWidth || 360, 560) - 24; // #app width minus padding
+  let step = 22;
+  if (n > 1) step = Math.min(22, Math.max(9, (avail - 54) / (n - 1)));
+  const perDeg = n > 1 ? Math.min(4.2, 46 / (n - 1)) : 0;
+  return { step, perDeg };
+}
+
+function cardPos(i, n, L) {
+  const mid = (n - 1) / 2;
+  const off = i - mid;
+  const droop = mid > 0 ? 12 * Math.pow(Math.abs(off) / mid, 2) : 0;
+  return { x: off * L.step, rot: off * L.perDeg, droop };
+}
+
+function previewHandOrder() {
+  const arr = handOrder.filter((id) => id !== drag.id);
+  arr.splice(drag.targetIdx, 0, drag.id);
+  return arr;
+}
+
+/* Lay out the fanned hand. Cards are absolutely positioned in the .hand
+   strip; this sets each card's transform/z-index from handOrder (or the
+   drag preview order mid-drag). Selected cards lift clear of the arc;
+   the dragged card follows the pointer. */
+function positionHand() {
+  const handEl = document.getElementById('hand');
+  if (!handEl || !state || state.screen !== 'game') return;
+  const order = drag && drag.moved ? previewHandOrder() : handOrder;
+  const n = order.length;
+  if (!n) return;
+  const L = handLayout(n);
+  handEl.querySelectorAll('.card').forEach((el) => {
+    const id = el.dataset.card;
+    const i = order.indexOf(id);
+    if (i < 0) return;
+    const p = cardPos(i, n, L);
+    let transform = `translate(${p.x}px, ${p.droop}px) rotate(${p.rot}deg)`;
+    let z = i + 1;
+    if (drag && drag.moved && drag.el === el) {
+      const p0 = cardPos(drag.origIdx, n, L);
+      transform = `translate(${p0.x + drag.lastDx}px, ${p0.droop - 10}px) rotate(${p.rot * 0.3}deg)`;
+      z = 60;
+    } else if (selected.includes(id)) {
+      transform = `translate(${p.x}px, ${p.droop - 14}px) rotate(${p.rot}deg)`;
+      z = 40;
+    }
+    el.style.transform = transform;
+    el.style.zIndex = z;
+  });
+}
+
+function onHandPointerDown(e) {
+  if (drag) return;
+  const el = e.currentTarget;
+  const idx = handOrder.indexOf(el.dataset.card);
+  if (idx < 0) return;
+  const L = handLayout(handOrder.length);
+  drag = {
+    id: el.dataset.card,
+    el,
+    pointerId: e.pointerId,
+    startX: e.clientX,
+    startY: e.clientY,
+    lastDx: 0,
+    origIdx: idx,
+    step: L.step,
+    n: handOrder.length,
+    moved: false,
+    targetIdx: idx,
+  };
+  try {
+    el.setPointerCapture(e.pointerId);
+  } catch {}
+  el.addEventListener('pointermove', onHandPointerMove);
+  el.addEventListener('pointerup', onHandPointerUp);
+  el.addEventListener('pointercancel', onHandPointerCancel);
+}
+
+function onHandPointerMove(e) {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const dx = e.clientX - drag.startX;
+  const dy = e.clientY - drag.startY;
+  drag.lastDx = dx;
+  if (!drag.moved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    drag.moved = true;
+    drag.el.classList.add('dragging');
+  }
+  if (drag.moved) {
+    e.preventDefault();
+    const t = Math.round(drag.origIdx + dx / drag.step);
+    drag.targetIdx = Math.max(0, Math.min(drag.n - 1, t));
+    positionHand(); // other cards slide to open the gap at targetIdx
+  }
+}
+
+function endDrag(commit) {
+  const d = drag;
+  if (!d) return null;
+  d.el.removeEventListener('pointermove', onHandPointerMove);
+  d.el.removeEventListener('pointerup', onHandPointerUp);
+  d.el.removeEventListener('pointercancel', onHandPointerCancel);
+  const preview = commit && d.moved ? previewHandOrder() : null;
+  drag = null;
+  if (preview) {
+    handOrder = preview;
+    renderQueued = false;
+    render(); // settles the card into its new slot
+  } else if (renderQueued) {
+    renderQueued = false;
+    render();
+  } else if (d.moved) {
+    positionHand(); // cancelled drag: slide everything back
+  }
+  return d;
+}
+
+function onHandPointerUp(e) {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  const wasDrag = drag.moved;
+  const d = endDrag(true);
+  if (d && !wasDrag) toggleCard(d.id); // a tap: press without real movement
+}
+
+function onHandPointerCancel(e) {
+  if (!drag || e.pointerId !== drag.pointerId) return;
+  endDrag(false);
+}
+
+window.addEventListener('resize', () => positionHand());
 
 async function onPlay() {
   const check = validateSelection();
@@ -497,6 +677,12 @@ function animatePlay(lp) {
 // ------------------------------------------------------------- main render
 
 function render() {
+  // Rebuilding the DOM mid-drag would destroy the card under the
+  // pointer — defer until the drag ends (endDrag flushes this).
+  if (drag) {
+    renderQueued = true;
+    return;
+  }
   if (!state) return renderHome();
   if (state.screen === 'lobby') return renderLobby();
   return renderGame();
