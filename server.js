@@ -74,11 +74,14 @@ function broadcastGame(room) {
 
 // CPUs call "last cards" as soon as they are eligible, just like a player
 // who is paying attention (the call is allowed at any time before their
-// next turn, not just on their turn).
+// next turn). It is never legal during the player's own turn —
+// engine.canDeclare enforces that; the explicit current-player skip
+// here keeps the sweep honest even if that ever changes.
 function cpuDeclareSweep(room) {
   const state = room.game;
   if (!state || state.phase !== 'playing') return;
   state.players.forEach((p, idx) => {
+    if (idx === state.current) return; // never declare on your own turn
     if (p.isCPU && engine.canDeclare(state, idx)) engine.applyDeclare(state, idx);
   });
 }
