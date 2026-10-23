@@ -354,9 +354,10 @@ function renderGame() {
       const selIdx = selected.indexOf(c.id);
       const playable = selected.length === 0 ? isCardPlayableFirst(c) : false;
       return `<div class="card ${isRed(c) ? 'red' : 'black'} ${selIdx >= 0 ? 'selected' : ''} ${
-        selected.length === 0 && ctx !== 'none' ? (playable ? 'legal' : 'dim') : ''
+        selected.length === 0 && ctx !== 'none' ? (playable ? 'legal' : 'unplayable') : ''
       }" data-card="${c.id}">
         ${selIdx >= 0 ? `<span class="order-badge">${selIdx + 1}</span>` : ''}
+        <span class="corner"><span class="crank">${c.rank}</span><span class="csuit">${SYM[c.suit]}</span></span>
         <span class="rank">${c.rank}</span><span class="suit">${SYM[c.suit]}</span>
         ${powerTag(c) ? `<span class="ptag">${powerTag(c)}</span>` : ''}
       </div>`;
@@ -383,7 +384,7 @@ function renderGame() {
       ${seats}
       <div class="centre">
         <div class="pile"><div class="draw-back"></div><div class="label">Draw · ${view.drawCount}</div></div>
-        <div class="pile"><div class="fan" id="fan">${fan}</div><div class="label">Discard · room ${view.code}</div></div>
+        <div class="pile"><div class="fan" id="fan">${fan}</div><div class="label">Discard</div></div>
       </div>
     </div>
     <div class="meta-row">
@@ -494,7 +495,10 @@ function previewHandOrder() {
 /* Lay out the fanned hand. Cards are absolutely positioned in the .hand
    strip; this sets each card's transform/z-index from handOrder (or the
    drag preview order mid-drag). Selected cards lift clear of the arc;
-   the dragged card follows the pointer. */
+   the dragged card follows the pointer. Layering only (positions and
+   the player's order never change): playable cards sit in a band above
+   unplayable ones, so a card that can be played is never covered by an
+   unplayable neighbour; within each band the fan order is preserved. */
 function positionHand() {
   const handEl = document.getElementById('hand');
   if (!handEl || !state || state.screen !== 'game') return;
@@ -509,13 +513,14 @@ function positionHand() {
     const p = cardPos(i, n, L);
     let transform = `translate(${p.x}px, ${p.droop}px) rotate(${p.rot}deg)`;
     let z = i + 1;
+    if (el.classList.contains('legal')) z = 100 + i + 1; // playable band, above 'unplayable'
     if (drag && drag.moved && drag.el === el) {
       const p0 = cardPos(drag.origIdx, n, L);
       transform = `translate(${p0.x + drag.lastDx}px, ${p0.droop - 10}px) rotate(${p.rot * 0.3}deg)`;
-      z = 60;
+      z = 300;
     } else if (selected.includes(id)) {
       transform = `translate(${p.x}px, ${p.droop - 14}px) rotate(${p.rot}deg)`;
-      z = 40;
+      z = 200;
     }
     el.style.transform = transform;
     el.style.zIndex = z;
@@ -663,14 +668,21 @@ function animatePlay(lp) {
     document.body.appendChild(inner);
     const dx = to.left + to.width / 2 - 27 - (from.left + from.width / 2 - 27);
     const dy = to.top - (from.top + 10);
+    // Transform-only flight on a soft ease, with a small upward lift at
+    // mid-flight so the card arcs onto the pile rather than sliding.
     inner.animate(
       [
         { transform: 'translate(0,0) rotate(0deg)', opacity: 1 },
+        {
+          transform: `translate(${dx * 0.55}px, ${dy * 0.55 - 24}px) rotate(${((i % 3) - 1) * 0.6}deg)`,
+          opacity: 1,
+          offset: 0.55,
+        },
         { transform: `translate(${dx}px, ${dy}px) rotate(${(i % 3) - 1}deg)`, opacity: 1 },
       ],
-      { duration: 550, delay: i * 380, easing: 'ease-in-out', fill: 'forwards' }
+      { duration: 500, delay: i * 320, easing: 'cubic-bezier(.22,.9,.28,1)', fill: 'forwards' }
     );
-    setTimeout(() => inner.remove(), i * 380 + 600);
+    setTimeout(() => inner.remove(), i * 320 + 560);
   });
 }
 
@@ -703,7 +715,7 @@ socket.on('state', (s) => {
       renderedSeq = lp.seq;
       render(); // render everything (hand, counts, log) first…
       animatePlay(lp); // …cards fly from the seat…
-      const total = lp.cards.length * 380 + 550;
+      const total = (lp.cards.length - 1) * 320 + 540; // last card lands at (n-1)*320 + 500
       if (fanTimer) clearTimeout(fanTimer);
       fanTimer = setTimeout(() => {
         displayedTop = state.topCards; // …and only then appear in the fan
