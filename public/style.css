@@ -106,7 +106,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    above the felt but under the seats and piles' working area, and
    never take pointer events. */
 .dir-arrows { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
-.dir-arrow { position: absolute; width: 56px; height: 56px; opacity: 0.85; }
+.dir-arrow { position: absolute; width: 56px; height: 56px; }
 .dir-arrow.qtl { left: 19%; top: 11%; }
 .dir-arrow.qtr { right: 19%; top: 11%; }
 .dir-arrow.qbr { right: 19%; bottom: 11%; }
@@ -126,7 +126,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .fan .card:nth-child(2) { left: 26px; transform: rotate(0deg); }
 .fan .card:nth-child(3) { left: 52px; transform: rotate(7deg); }
 
-.meta-row { display: flex; gap: 8px; justify-content: center; margin: 5px 0; flex-wrap: wrap; }
+.meta-row { position: relative; display: flex; gap: 8px; justify-content: center; margin: 5px 0; flex-wrap: wrap; }
 .chip {
   background: rgba(0,0,0,0.35);
   border-radius: 999px;
@@ -134,6 +134,22 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   font-size: 13px;
 }
 .chip.turn { background: #1a6b4a; }
+/* The hint button: an icon-only round button pinned to the right of
+   the turn-pill row. It reveals the guidance box (.banner) on demand;
+   while the box is showing the button is lit solid gold. With no
+   guidance to show it is disabled and dimmed by the global
+   button:disabled rule. */
+.hint-btn {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(216,179,106,0.5);
+  color: var(--gold);
+}
+.hint-btn.active { background: var(--gold); color: #333; }
+.hint-btn svg { display: block; }
 .banner {
   border-radius: 12px;
   padding: 10px 14px;
