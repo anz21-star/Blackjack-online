@@ -16,6 +16,9 @@ let renderedPickupSeq = 0; // lastPickup seq already animated
 let displayedTop = []; // discard fan contents (lags during play animation)
 let fanTimer = null;
 let suitPickFor = null; // cardIds awaiting a declared suit
+let hintVisible = false; // guidance box shown via the hint button
+let hintTimer = null; // 10s auto-hide timer for the guidance box
+let hintStamp = null; // turn stamp captured when the box was shown
 
 /* Display order for the local hand (card ids), drag-reorderable.
    Purely presentational: the play selection is still `selected`, in tap
@@ -340,15 +343,69 @@ function dirArrowsHtml(direction) {
   const key = direction === 1 ? 'cw' : 'ccw';
   const defs =
     '<svg width="0" height="0" style="position:absolute"><defs>' +
-    '<marker id="dirHead" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="6" markerHeight="6" orient="auto">' +
-    '<path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(216,179,106,0.9)"></path></marker></defs></svg>';
+    '<marker id="dirHead" viewBox="0 0 10 10" refX="7.5" refY="5" markerWidth="5" markerHeight="5" orient="auto">' +
+    '<path d="M 0 2 L 10 5 L 0 8 z" fill="rgba(216,179,106,0.5)"></path></marker></defs></svg>';
   const arrows = Object.keys(DIR_PATHS)
     .map(
       (q) =>
-        `<div class="dir-arrow ${q}"><svg viewBox="0 0 56 56" width="56" height="56"><path d="${DIR_PATHS[q][key]}" fill="none" stroke="rgba(216,179,106,0.55)" stroke-width="3.5" stroke-linecap="round" marker-end="url(#dirHead)"></path></svg></div>`
+        `<div class="dir-arrow ${q}"><svg viewBox="0 0 56 56" width="56" height="56"><path d="${DIR_PATHS[q][key]}" fill="none" stroke="rgba(216,179,106,0.34)" stroke-width="3.5" stroke-linecap="round" marker-end="url(#dirHead)"></path></svg></div>`
     )
     .join('');
   return defs + arrows;
+}
+
+/* The contextual guidance text (chain / bring-back instructions).
+   It used to sit on screen as a red box every turn; now it stays
+   hidden until the player asks for it with the hint button beside
+   the turn pill, and it disappears again once the turn has been
+   played or after 10 seconds, whichever comes first. */
+function guidanceText(view) {
+  if (view.phase === 'bringback' && view.bringBack) {
+    const fin = view.players[view.bringBack.finisherIdx].name;
+    const actor = view.players[view.bringBack.actorIdx].name;
+    return `${fin} is out — unless a pick up chain reaches them. ${actor} to act${
+      view.bringBack.total ? ` (chain at ${view.bringBack.total})` : ''
+    }.`;
+  }
+  if (view.chain && view.phase === 'playing') {
+    return `Pick up ${view.pending} pending — play a 2 or black Jack to add to it, a red Jack to cancel, or pick up ${view.pending}.`;
+  }
+  return '';
+}
+
+/* A fingerprint of "where the game is": if it changes, the turn the
+   guidance was shown for has been played (a play, a pick up, a skip
+   or reversal moving the turn on, the phase moving on). */
+function turnStamp(view) {
+  return [
+    view.phase,
+    view.currentIdx,
+    view.direction,
+    view.lastPlay ? view.lastPlay.seq : 0,
+    view.lastPickup ? view.lastPickup.seq : 0,
+  ].join('|');
+}
+
+function showHint() {
+  if (!state || state.screen !== 'game' || !guidanceText(state)) return;
+  hintVisible = true;
+  hintStamp = turnStamp(state);
+  if (hintTimer) clearTimeout(hintTimer);
+  hintTimer = setTimeout(() => {
+    hintVisible = false;
+    hintTimer = null;
+    render();
+  }, 10000);
+  render();
+}
+
+function hideHint() {
+  hintVisible = false;
+  hintStamp = null;
+  if (hintTimer) {
+    clearTimeout(hintTimer);
+    hintTimer = null;
+  }
 }
 
 function renderGame() {
@@ -361,16 +418,8 @@ function renderGame() {
   const seats = view.players.map((p) => seatEl(view, p)).join('');
   const fan = displayedTop.map((c) => cardEl(c)).join('');
 
-  let banner = '';
-  if (view.phase === 'bringback' && view.bringBack) {
-    const fin = view.players[view.bringBack.finisherIdx].name;
-    const actor = view.players[view.bringBack.actorIdx].name;
-    banner = `<div class="banner">${fin} is out — unless a pick up chain reaches them. ${actor} to act${
-      view.bringBack.total ? ` (chain at ${view.bringBack.total})` : ''
-    }.</div>`;
-  } else if (view.chain && view.phase === 'playing') {
-    banner = `<div class="banner">Pick up ${view.pending} pending — play a 2 or black Jack to add to it, a red Jack to cancel, or pick up ${view.pending}.</div>`;
-  }
+  const guidance = guidanceText(view);
+  const banner = hintVisible && guidance ? `<div class="banner">${guidance}</div>` : '';
 
   const turnName =
     view.phase === 'playing'
@@ -449,6 +498,7 @@ function renderGame() {
     </div>
     <div class="meta-row">
       <span class="chip turn">${turnName}</span>
+      <button class="hint-btn${hintVisible ? ' active' : ''}" id="hintbtn" type="button" aria-label="Show hint" title="Hint" ${guidance ? '' : 'disabled'}><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg></button>
     </div>
     ${banner}
     <div class="handzone" id="handzone">
@@ -480,6 +530,16 @@ function renderGame() {
   });
   positionHand();
   positionSelRow();
+  const hintBtn = document.getElementById('hintbtn');
+  if (hintBtn)
+    hintBtn.onclick = () => {
+      if (hintVisible) {
+        hideHint();
+        render();
+      } else {
+        showHint();
+      }
+    };
   document.getElementById('play').onclick = onPlay;
   document.getElementById('pickup').onclick = async () => {
     const res = await emit('pickup', {});
@@ -879,6 +939,7 @@ function renderSuitPicker() {
 function leaveRoom() {
   storeRoom(null); // explicit leave: no reclaim afterwards
   socket.emit('leaveRoom', {});
+  hideHint(); // stop the auto-hide timer; there is no turn any more
   state = null;
   selected = [];
   selDrag = null;
@@ -981,6 +1042,10 @@ function render() {
 socket.on('state', (s) => {
   const prevScreen = state && state.screen;
   state = s;
+  // A shown hint belongs to the turn it was asked for: as soon as a
+  // play or pick up lands (the turn stamp moves on), or the guidance
+  // no longer applies, the box hides — the 10s timer is the backstop.
+  if (hintVisible && (s.screen !== 'game' || !guidanceText(s) || turnStamp(s) !== hintStamp)) hideHint();
   if (s.screen === 'game') {
     // Keep only still-valid selections.
     if (selected.length) {
