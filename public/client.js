@@ -635,7 +635,7 @@ function renderSuitPicker() {
   modal.innerHTML = `<div class="modal"><div class="box">
     <div>Your Ace names the suit to follow:</div>
     <div class="suits">${SUITS.map(
-      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#f0a294' : '#34383e'}">${SYM[s]}</button>`
+      (s) => `<button data-suit="${s}" style="color:${s === 'hearts' || s === 'diamonds' ? '#f86c56' : '#707882'}">${SYM[s]}</button>`
     ).join('')}</div>
   </div></div>`;
   modal.querySelectorAll('button').forEach((b) => {
