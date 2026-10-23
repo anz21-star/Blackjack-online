@@ -222,8 +222,8 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .bubble.suit { padding: 3px 8px; }
 .bubble.suit .sg { display: inline-flex; line-height: 0; }
 .bubble.suit .sg svg { width: 15px; height: 15px; display: block; }
-.bubble.suit .sg-b { color: #8a939e; }
-.bubble.suit .sg-r { color: #ff7a5c; }
+.bubble.suit .sg-b { color: #2f353c; }
+.bubble.suit .sg-r { color: #ff6a52; }
 
 /* ---------- cards ---------- */
 
@@ -367,7 +367,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    grey for spades/clubs, bright red for hearts/diamonds (the colours
    are set inline per suit). The icons are the shared SVG shapes, the
    same as the ones on the card faces. */
-.suits button { line-height: 1; padding: 10px 16px; min-width: 66px; background: #7ad9a3; }
+.suits button { line-height: 1; padding: 10px 16px; min-width: 66px; background: #5b9b7c; }
 .suits button svg { width: 42px; height: 42px; display: block; }
 
 #toast {
