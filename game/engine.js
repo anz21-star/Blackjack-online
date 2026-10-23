@@ -85,6 +85,7 @@ function createGame(seats, startSeat) {
     pending: 0,
     chain: false,
     requiredSuit: null,
+    suitDeclarer: null, // seat index that named requiredSuit (null when none in force)
     phase: 'playing', // 'playing' | 'bringback' | 'over'
     bringBack: null, // { finisher, total, actor, contributors }
     placements: [], // player indices in finishing order
@@ -308,6 +309,14 @@ function validatePlay(state, idx, cardIds, declaredSuit) {
     }
   }
   if (final.rank === 'Q') return 'A Queen must be covered — a play can never end on a Queen.';
+  // A play that empties the hand is a finish, and a finished play must
+  // be fully legal: it may not end on a power card (only a red Jack may
+  // finish among power cards). Without this check the play was accepted
+  // onto the pile and merely penalised afterwards, so a whole hand
+  // could be dumped in one go on an illegal finish card.
+  if (cards.length === state.players[idx].hand.length && !isLegalFinishCard(final)) {
+    return `That would finish you on ${cardStr(final)} — a finished play must end on an ordinary card or a red Jack.`;
+  }
   if (final.rank === 'A' && !SUITS.includes(declaredSuit)) return 'Choose a suit for the Ace to declare.';
   if (final.rank !== 'A' && declaredSuit) return null; // ignored harmlessly
   return null;
@@ -329,6 +338,10 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
   const wasChain = state.chain;
 
   // ---- going out?
+  // (Non-chain plays that would finish on an illegal card are rejected
+  // by validatePlay before they get here; this penalty path still
+  // covers chain answers that empty the hand, and any finish made
+  // without an active "last cards" call.)
   if (p.hand.length === 0) {
     if (!isLegalFinishCard(final) || !p.declared) {
       const reason = !isLegalFinishCard(final)
@@ -339,6 +352,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
         state.pending = 0;
       }
       state.requiredSuit = null;
+      state.suitDeclarer = null;
       p.declared = false; // their turn has ended; any call is spent
       drawCards(state, idx, 1);
       pushLog(state, `${p.name} ${reason} — picks up 1 and stays in.`);
@@ -354,6 +368,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
       state.pending = 0;
     }
     state.requiredSuit = null;
+    state.suitDeclarer = null;
     pushLog(state, `${p.name} is out — ${ordinal(p.place)} place!`);
     const active = activeIndices(state);
     if (active.length === 1) {
@@ -383,6 +398,10 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
 
   // ---- ordinary play effects
   if (wasChain) {
+    // The chain answer lands on top of whatever was there (including a
+    // suit-naming Ace): any named suit stops being in force.
+    state.requiredSuit = null;
+    state.suitDeclarer = null;
     if (cards.every(isRedJack)) {
       state.chain = false;
       state.pending = 0;
@@ -400,6 +419,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
   let trailing = 1;
   for (let i = cards.length - 2; i >= 0 && cards[i].rank === final.rank; i--) trailing++;
   state.requiredSuit = null;
+  state.suitDeclarer = null;
 
   if (final.rank === '2') {
     state.pending = 2 * trailing;
@@ -436,6 +456,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
     advance(state, 1);
   } else if (final.rank === 'A') {
     state.requiredSuit = declaredSuit;
+    state.suitDeclarer = idx;
     pushLog(state, `${p.name} named ${declaredSuit} to follow.`);
     advance(state, 1);
   } else {
@@ -561,6 +582,7 @@ function buildView(state, viewerIdx) {
     pending: state.pending,
     chain: state.chain,
     requiredSuit: state.requiredSuit,
+    suitDeclarerIdx: state.requiredSuit ? state.suitDeclarer : null,
     drawCount: state.deck.length,
     topCards,
     lastPlay: state.lastPlay,
