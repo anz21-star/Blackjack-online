@@ -84,7 +84,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
   background: radial-gradient(ellipse at center, #11603f 0%, var(--felt) 62%, #093626 100%);
   border: 6px solid var(--rim);
   border-radius: 26px;
-  height: 330px;
+  height: 380px;
   margin-bottom: 10px;
   overflow: hidden;
 }
@@ -136,13 +136,13 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
    draw pile. */
 .seat {
   position: absolute;
-  width: 100px;
-  height: 104px;
+  width: 84px;
+  height: 88px;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   text-align: center;
   background: rgba(0,0,0,0.28);
   border-radius: 12px;
-  padding: 6px 8px;
+  padding: 6px 6px;
   font-size: 13px;
 }
 .seat .sname { font-weight: bold; margin-bottom: 3px; white-space: nowrap; }
@@ -155,10 +155,10 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* Opponent hands as a fan of mini card-backs (one per card, capped). */
 .opp-fan { display: inline-flex; align-items: center; }
 .opp-fan .mback {
-  width: 17px; height: 24px; border-radius: 3px; flex: none;
+  width: 15px; height: 21px; border-radius: 3px; flex: none;
   background: repeating-linear-gradient(45deg, #7c2d22 0 4px, #93392b 4px 8px);
   border: 1px solid #d8b36a88;
-  margin-left: -11px;
+  margin-left: -9px;
   transform: rotate(var(--r, 0deg));
   box-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
@@ -166,7 +166,7 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 /* Side seats: vertical stack of sideways (rotated) backs, overlapped
    tightly enough that a full fan fits the fixed seat box. */
 .opp-fan.v { flex-direction: column; }
-.opp-fan.v .mback { width: 24px; height: 17px; margin-left: 0; margin-top: -12px; }
+.opp-fan.v .mback { width: 20px; height: 14px; margin-left: 0; margin-top: -10px; }
 .opp-fan.v .mback:first-child { margin-top: 0; }
 .seat.active-turn { outline: 2px solid var(--gold); }
 .seat.out { opacity: 0.55; }
@@ -223,11 +223,11 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 
 /* ---------- hand & controls ---------- */
 
-.hand-title { font-size: 18px; margin: 12px 0 6px; }
 /* The local hand is a fan: cards are absolutely positioned along a
    shallow arc by client.js (positionHand). The strip is one card tall
-   plus room for the arc droop and the selected-card lift. */
-.hand { position: relative; height: 118px; }
+   plus room for the arc droop and the selected-card drop below the
+   arc (16 top + 76 card + 12 droop + 20 drop + badge ≈ 131px). */
+.hand { position: relative; height: 140px; margin-top: 10px; }
 .hand .card {
   position: absolute;
   left: 50%; top: 16px;
@@ -239,9 +239,10 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 }
 .hand .card.selected { outline: 2px solid var(--gold); }
 .hand .card.dragging { transition: none; box-shadow: 0 8px 18px rgba(0,0,0,0.5); }
-/* In the fan the next card covers the right edge, so the selection
-   order badge sits on the visible left corner instead. */
-.hand .order-badge { right: auto; left: -7px; }
+/* The selection order badge hangs off the card's bottom-left corner:
+   clear of the top-left corner index and of the centred power text,
+   and visible now that selected cards drop below the fan. */
+.hand .order-badge { top: auto; right: auto; bottom: -7px; left: -7px; }
 .hand .card.legal { outline: 2px solid rgba(120, 220, 150, 0.55); }
 /* Unplayable cards stay fully opaque but muted to a half tone; the
    rank, suit and power text remain clearly readable. (Playable cards
@@ -261,11 +262,44 @@ label.toggle { display: flex; align-items: center; gap: 8px; font-size: 15px; ma
 .order-badge {
   position: absolute; top: -7px; right: -7px;
   background: var(--gold); color: #333;
+  opacity: 1; /* solid — never translucent over the card beneath */
   width: 18px; height: 18px; border-radius: 50%;
   font-size: 12px; font-weight: bold;
   display: flex; align-items: center; justify-content: center;
   z-index: 2;
 }
+
+/* ---------- game header & in-table buttons ---------- */
+
+/* Title row on the game screen; the exit button sits right-aligned
+   against it, clear of the table below. */
+.game-head { position: relative; }
+.exit-btn {
+  position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+  width: 36px; height: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.30);
+  border: 1px solid rgba(216,179,106,0.5);
+}
+.exit-btn svg { display: block; }
+
+/* "Last Cards!" lives in the table's bottom-right corner, on the felt
+   but clear of the right seat (mid-height) and the centre piles. */
+.declare-btn {
+  position: absolute; right: 10px; bottom: 10px; z-index: 20;
+  font-size: 14px; padding: 8px 14px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+}
+/* Called state: the label stays "Last Cards!", so the call shows as a
+   solid gold fill with a light ring instead. */
+.declare-btn.called {
+  background: var(--gold); color: #333; font-weight: bold;
+  box-shadow: 0 0 0 2px rgba(255,251,232,0.65), 0 2px 6px rgba(0,0,0,0.4);
+}
+/* A called button is also disabled (no re-declare) — keep it fully
+   bright so the call still reads clearly; it just isn't pressable. */
+.declare-btn.called:disabled { opacity: 1; }
 
 .controls { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0 4px; }
 .hint { text-align: center; font-size: 14px; min-height: 20px; margin: 6px 0; }
