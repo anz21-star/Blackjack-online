@@ -94,6 +94,8 @@ function createGame(seats, startSeat) {
     log: [`Game started. ${cardStr(startCard)} is flipped to start.`],
     playSeq: 0,
     lastPlay: null, // { seq, playerIdx, cards }
+    pickupSeq: 0,
+    lastPickup: null, // { seq, playerIdx, count } — public (counts are public)
   };
   // The flipped card's power applies immediately.
   if (startCard.rank === 'K') {
@@ -215,6 +217,16 @@ function recordPlay(state, idx, cards) {
     playerIdx: idx,
     cards: cards.map((c) => ({ id: c.id, suit: c.suit, rank: c.rank })),
   };
+}
+
+// Mirror of recordPlay for pick ups, so clients can animate cards
+// flying from the draw pile to the player who picked up. Call with the
+// number ACTUALLY drawn (drawCards' return value, so reshuffles and
+// the nothing-left edge are handled); zero draws record nothing.
+function recordPickup(state, idx, drawn) {
+  if (!drawn || drawn <= 0) return;
+  state.pickupSeq += 1;
+  state.lastPickup = { seq: state.pickupSeq, playerIdx: idx, count: drawn };
 }
 
 function ordinal(n) {
@@ -358,7 +370,7 @@ function applyPlay(state, idx, cardIds, declaredSuit) {
       state.requiredSuit = null;
       state.suitDeclarer = null;
       p.declared = false; // their turn has ended; any call is spent
-      drawCards(state, idx, 1);
+      recordPickup(state, idx, drawCards(state, idx, 1));
       pushLog(state, `${p.name} ${reason} — picks up 1 and stays in.`);
       advance(state, 1);
       return { ok: true };
@@ -480,10 +492,10 @@ function applyPickup(state, idx) {
     const n = state.pending;
     state.chain = false;
     state.pending = 0;
-    drawCards(state, idx, n);
+    recordPickup(state, idx, drawCards(state, idx, n));
     pushLog(state, `${p.name} picked up ${n}.`);
   } else {
-    drawCards(state, idx, 1);
+    recordPickup(state, idx, drawCards(state, idx, 1));
     pushLog(state, `${p.name} picked up 1.`);
   }
   // Picking up ends the player's turn, so a "last cards" call covering
@@ -541,7 +553,7 @@ function applyBringBackPlay(state, idx, cardIds) {
     const total = bb.total;
     state.phase = 'playing';
     state.bringBack = null;
-    drawCards(state, bb.finisher, total);
+    recordPickup(state, bb.finisher, drawCards(state, bb.finisher, total));
     pushLog(state, `${f.name} is brought back in and picks up ${total}!`);
     state.current = nextActiveFrom(state, bb.finisher);
     return { ok: true };
@@ -558,7 +570,7 @@ function applyBringBackPickup(state, idx) {
   const finisherName = state.players[bb.finisher].name;
   if (bb.total > 0) {
     const n = bb.total;
-    drawCards(state, idx, n);
+    recordPickup(state, idx, drawCards(state, idx, n));
     pushLog(state, `${p.name} can't add to the bring-back — picks up ${n}. ${finisherName} stays out.`);
     state.phase = 'playing';
     state.bringBack = null;
@@ -590,6 +602,7 @@ function buildView(state, viewerIdx) {
     drawCount: state.deck.length,
     topCards,
     lastPlay: state.lastPlay,
+    lastPickup: state.lastPickup,
     log: state.log.slice(-40),
     bringBack: state.bringBack
       ? {
